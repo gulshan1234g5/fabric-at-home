@@ -18,7 +18,10 @@
 (function () {
   "use strict";
 
-  const OSRM_BASE = "https://router.project-osrm.org/route/v1/driving";
+  const OSRM_HOSTS = [
+    "https://router.project-osrm.org",
+    "https://routing.openstreetmap.de/routed-car"
+  ];
   const TIMEOUT_MS = 7000;
   const MIN_INTERVAL_MS = 250;          // ≤4 hits/sec on the shared demo server
   const ROAD_FACTOR = 1.3;              // estimate-only fallback
@@ -80,16 +83,19 @@
     };
   }
 
-  // ---- OSRM fetch ----------------------------------------------------------
-
+  // -- OSRM fetch with host rotation ---------------------------------------
+  // The public demo server is shared and can throttle/504 (esp. mobile IPs).
+  // Try each host in order for the SAME pair; first Ok route wins. On a full
+  // failure the caller falls back to the estimate path (labelled "estimate").
   function fetchOsrm(aLat, aLng, bLat, bLng) {
+    const coords = aLng.toFixed(6) + "," + aLat.toFixed(6) + ";" + bLng.toFixed(6) + "," + bLat.toFixed(6);
     const wait = Math.max(0, MIN_INTERVAL_MS - (Date.now() - lastFire));
-    const start = Date.now();
-    const url = OSRM_BASE + "/" + aLng.toFixed(6) + "," + aLat.toFixed(6) +
-      ";" + bLng.toFixed(6) + "," + bLat.toFixed(6) + "?overview=false&steps=false&annotations=false";
 
     const chain = new Promise((resolve) => {
-      const doFetch = () => {
+      const attempt = (i) => {
+        if (i >= OSRM_HOSTS.length) { resolve(null); return; }
+        const url = OSRM_HOSTS[i] + "/route/v1/driving/" + coords +
+          "?overview=false&steps=false&annotations=false";
         if (typeof fetch !== "function") { resolve(null); return; }
         const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
         const timer = ctrl ? setTimeout(() => ctrl.abort(), TIMEOUT_MS) : null;
@@ -98,24 +104,23 @@
           .then((j) => {
             if (j && j.code === "Ok" && j.routes && j.routes[0]) {
               const r = j.routes[0];
-              resolve({
+              return resolve({
                 distanceM: Math.max(50, Math.round(r.distance)),
                 durationS: typeof r.duration === "number" ? r.duration : Math.max(300, Math.round(r.distance / 1000 / AVG_SPEED_KMH * 3600)),
                 source: "osrm",
+                host: OSRM_HOSTS[i],
                 ts: Date.now()
               });
-            } else resolve(null);
+            }
+            // Ok-code absent → try next host
+            attempt(i + 1);
           })
-          .catch(() => resolve(null))
+          .catch(() => attempt(i + 1))           // network/abort → next host
           .then(() => { if (timer) clearTimeout(timer); });
       };
-      if (wait > 0) setTimeout(doFetch, wait); else doFetch();
+      if (wait > 0) setTimeout(() => attempt(0), wait); else attempt(0);
     });
-    // keep lastFire up to date after scheduling
-    return chain.then((res) => {
-      lastFire = Date.now();
-      return res;
-    });
+    return chain.then((res) => { lastFire = Date.now(); return res; });
   }
 
   // ---- public: resolve a route (cache → OSRM → estimate) -------------------

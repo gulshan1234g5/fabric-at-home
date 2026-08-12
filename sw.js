@@ -1,4 +1,11 @@
-// FabricAtHome service worker — v7 (research-aligned: stale-while-revalidate).
+// FabricAtHome service worker — v8 (research-aligned: stale-while-revalidate).
+//
+// NOTES ON DEPLOY-MENTALITY:
+//   * Every release MUST bump these version constants — otherwise returning
+//     clients (phones) keep serving the OLD shell from the same cache name and
+//     "my changes didn't apply". Cache-first + version bump = deterministic.
+//   * On activate, any cache outside `keep` is purged, so a bumped release
+//     self-cleans old versions on the device.
 //
 // Split caches:
 //   fah-shell-N   — the app shell (static assets). Cache-first, versioned.
@@ -9,13 +16,13 @@
 //   * Navigation -> network-first; if the network dies, serve cached ./index.html.
 //   * Static shell -> cache-first (never refetch; version bump invalidates).
 //   * Same-origin GET JSON/API -> stale-while-revalidate.
-//   * Everything else (external reverse-geocode etc.) -> never cached (privacy).
+//   * Everything else (external OSRM/reverse-geocode) -> never cached (privacy).
 //   * Skip-waiting on a SKIP_WAITING message so an update applies cleanly.
 
-const SHELL = "fah-shell-v7";
-const RUNTIME = "fah-runtime-v7";
-const PAGES = "fah-pages-v7";
-const PAGES_COOKIE = "fah-v7";
+const SHELL = "fah-shell-v8";
+const RUNTIME = "fah-runtime-v8";
+const PAGES = "fah-pages-v8";
+const PAGES_COOKIE = "fah-v8";
 
 const ASSETS = [
   "./",

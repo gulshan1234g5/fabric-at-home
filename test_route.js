@@ -13,14 +13,20 @@ global.localStorage = {
 // Mock OSRM: same road result regardless of coords; developer controls failure.
 let hits = 0;
 let failNext = false;
+let failPrimary = false;      // force the primary host down → rotation kicks in
+let failAll = false;          // full outage → estimate fallback
+const hostsHit = [];
 const MOCK_DIST = 2447;     // meters
 const MOCK_DUR = 175.8;     // seconds
 global.fetch = (url) => {
   hits++;
+  const host = url.startsWith("https://routing.openstreetmap.de") ? "backup" : "primary";
+  hostsHit.push(host);
   return new Promise((resolve, reject) => {
     setTimeout(() => {
       if (failNext) { failNext = false; reject(new Error("mock network fail")); return; }
-      const m = url.match(/(-?\d+\.\d+),\d+\.\d+-?\d*;-?\d+\.\d+,(-?\d+\.\d+)\?/);
+      if (failPrimary && host === "primary") { failPrimary = false; reject(new Error("primary 504")); return; }
+      if (failAll) { reject(new Error("full outage")); return; }
       resolve({
         ok: true,
         json: () => Promise.resolve({
@@ -60,13 +66,23 @@ function ok(cond, label) {
   const p = R.peek(B.lat, B.lng, { lat: A.lat, lng: A.lng });
   ok(p && p.source === "osrm", "peek() returns cached route");
 
-  console.log("— honest fallback on failure —");
-  failNext = true;
+  console.log("— host rotation (primary down → backup exact still works) —");
+  failPrimary = true;
+  const D = { lat: 12.9118, lng: 77.6410 };   // HSR Layout
+  const r4 = await R.route(D.lat, D.lng, B.lat, B.lng);
+  ok(r4.source === "osrm", "backup host returned exact OSRM route after primary 504");
+  ok(r4.distanceM === MOCK_DIST, "backup distance identical");
+  ok(hostsHit.filter((h) => h === "primary").length >= 1 && hostsHit.filter((h) => h === "backup").length >= 1,
+    "both hosts were attempted in rotation");
+
+  console.log("— honest fallback on failure (both hosts down) —");
+  failAll = true;
   const C = { lat: 12.9719, lng: 77.6412 };   // Indiranagar
   const r3 = await R.route(C.lat, C.lng, B.lat, B.lng);
+  failAll = false;
   ok(r3.source === "estimate", "estimated source when OSRM fails");
   ok(r3.distanceM > 0 && r3.durationS > 0, "estimate has sane numbers");
-  ok(hits >= 2, "failed attempt counted");
+  ok(hits >= 2, "both hosts attempted");
 
   console.log("— formatting (ride-app style) —");
   ok(R.fmtDistance(2447) === "2.4 km", "km rounded to 1 decimal");
