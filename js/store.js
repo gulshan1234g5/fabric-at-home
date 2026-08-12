@@ -262,6 +262,14 @@
   function ordersFor(vendorId) {
     return getState().orders.filter((o) => o.showroomId === vendorId);
   }
+  // Demand signal (marketplace trust research): how many deals did this vendor
+  // complete within the last N days. Honest numbers only — derived from the
+  // local order ledger, never faked.
+  function recentDealsFor(vendorId, days) {
+    const n = days && days > 0 ? days : 30;
+    const cutoff = Date.now() - n * 86400000;
+    return ordersFor(vendorId).filter((o) => o.createdAt && new Date(o.createdAt).getTime() >= cutoff).length;
+  }
   function vendorEarnings(vendorId) {
     const orders = ordersFor(vendorId);
     return {
@@ -321,7 +329,7 @@
     getState, save,
     vendorById, itemAmount, itemsFor, itemName, categoryName,
     createVisit, advanceVisit, cancelVisit, createPayment,
-    createOrder, totalCommission, ordersFor,
+    createOrder, totalCommission, ordersFor, recentDealsFor,
     reviewsFor, createReview,
     vendorEarnings, settlementsFor, settleStats,
     fmtINR, fmtSlot, fmtDateOnly, nextSlots,

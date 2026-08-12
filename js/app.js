@@ -7,6 +7,59 @@
 
   const S = window.FAHStore;
   const data = window.FAH;
+  const Search = window.FAHSearch || null;
+  let searchQuery = "";
+  let gpsResolved = false;
+  let _errBoundary = false;
+
+  // Tactile feedback (part of mobile-native feel; no-op where unsupported).
+  function buzz(ms) {
+    try { if (navigator && navigator.vibrate) navigator.vibrate(ms || 10); } catch (e) {}
+  }
+  // View-transition wrapper: native View Transitions API where available,
+  // CSS fade fallback elsewhere. Research: motion should be fast & subtle.
+  function transitionRender(fn) {
+    if (document.startViewTransition) {
+      try { document.startViewTransition(fn); return; } catch (e) {}
+    }
+    fn();
+    const view = document.getElementById("view");
+    if (view) { view.classList.remove("fade-in"); void view.offsetWidth; view.classList.add("fade-in"); }
+  }
+
+  // ---- offline banner --------------------------------------------------------
+  function updateOfflineBanner(offline) {
+    let b = document.getElementById("fah-offline");
+    const on = window.FAHProvider && (offline !== undefined ? offline : window.FAHProvider.isOffline());
+    if (!b && on) {
+      b = document.createElement("div");
+      b.id = "fah-offline";
+      b.className = "offline-banner";
+      b.setAttribute("role", "status");
+      b.textContent = "You're offline — your data stays on this device and syncs back when you reconnect.";
+      document.body.appendChild(b);
+    }
+    if (b) b.hidden = !on;
+  }
+
+  // ---- error boundary: never let one bad render blank the app ----------------
+  function safeRender() {
+    try {
+      applyRender();
+      _errBoundary = false;
+    } catch (e) {
+      if (_errBoundary) return; // avoid infinite loop on a broken fallback
+      _errBoundary = true;
+      const view = document.getElementById("view");
+      if (view) {
+        view.replaceChildren(div({ class: "empty" }, [
+          el("b", {}, ["Something went wrong."]),
+          el("p", { class: "muted small" }, ["Your data is safe on this device."]),
+          btn("Reload", { class: "btn primary", dataset: { reload: "1" } })
+        ]));
+      }
+    }
+  }
 
   // ---- Router --------------------------------------------------------------
 
@@ -117,6 +170,7 @@
     const geoList = geoSorted();
     const sortable = geoList || [...st.showrooms].sort((a, b) => a.distanceKm - b.distanceKm);
     const activeVisits = st.visits.filter((v) => v.status !== "completed");
+    const q = (searchQuery || "").trim();
 
     const catGrid = div({ class: "cat-grid" });
     data.categories.forEach((c) => {
@@ -128,28 +182,7 @@
       ]));
     });
 
-    const list = div({ class: "list" });
-    sortable.forEach((v) => {
-      list.appendChild(div({ class: "card showroom-card", dataset: { nav: "showroom", id: v.id } }, [
-        div({ class: "showroom-top" }, [
-          div({ class: "showroom-head" }, [el("h3", {}, [v.name]), trustRow(v)]),
-          div({ class: "showroom-meta" }, [distRow(v)])
-        ]),
-        div({ class: "showroom-offers" }, v.offers.map((o) => el("span", { class: "offer" }, ["↳ " + o]))),
-        div({ class: "cat-row" }, v.categories.map((c) => catChip(c, false))),
-        // latest review teaser (trust at a glance)
-        (function () {
-          const rv = S.reviewsFor(v.id)[0];
-          return rv ? div({ class: "review-teaser" }, [
-            stars(rv.rating),
-            el("span", { class: "muted small" }, ["\u201C" + rv.comment.slice(0, 46) + "\u201D"])
-          ]) : null;
-        })(),
-        btn("View catalog", { class: "btn ghost sm", dataset: { nav: "showroom", id: v.id } })
-      ]));
-    });
-
-    const body = [heroSection(), customerStrip()];
+    const body = [heroSection(), searchBar(), customerStrip()];
     if (activeVisits.length) {
       const live = div({ class: "live-strip" });
       activeVisits.forEach((v) => {
@@ -163,10 +196,125 @@
       });
       body.push(section("Active visits", live));
     }
-    body.push(section("Fabric categories", catGrid));
-    body.push(section("Nearby showrooms", list));
+
+    if (q && Search) {
+      const res = Search.search(data.catalog, st.showrooms, q);
+      body.push(section("Results", searchResults(res, q)));
+    } else {
+      body.push(section("Fabric categories", catGrid));
+      if (geoLocating()) {
+        body.push(section("Nearby showrooms", skeletonList(3)));
+      } else {
+        const list = div({ class: "list" });
+        sortable.forEach((v) => list.appendChild(showroomCard(v)));
+        body.push(section("Nearby showrooms", list));
+      }
+    }
 
     return div({ class: "stack" }, body);
+  }
+
+  // Skeleton placeholders render only while a REAL async load is in flight —
+// today that's a future Supabase backend boot (local-first hydrates instantly).
+function geoLocating() {
+  return !!(window.FAHProvider &&
+    typeof window.FAHProvider.bootedKind === "function" &&
+    window.FAHProvider.bootedKind() === "supabase" &&
+    typeof window.FAHProvider.isBooting === "function" &&
+    window.FAHProvider.isBooting());
+  }
+  function skeletonList(n) {
+    const out = div({ class: "list" });
+    for (let i = 0; i < n; i++) {
+      out.appendChild(div({ class: "card sk" }, [
+        div({ class: "sk-line", style: "width:45%" }),
+        div({ class: "sk-line", style: "width:70%" }),
+        div({ class: "sk-line", style: "width:55%" })
+      ]));
+    }
+    return out;
+  }
+
+  function showroomCard(v) {
+    const recent = (typeof S.recentDealsFor === "function") ? S.recentDealsFor(v.id, 30) : 0;
+    const rv = S.reviewsFor(v.id)[0];
+    const demand = recent > 0
+      ? div({ class: "demand" }, [
+          el("span", { class: "dot" }),
+          el("span", { class: "muted small" }, [recent + " deal" + (recent === 1 ? "" : "s") + " this month"])
+        ])
+      : null;
+    return div({ class: "card showroom-card", dataset: { nav: "showroom", id: v.id } }, [
+      div({ class: "showroom-top" }, [
+        div({ class: "showroom-head" }, [el("h3", {}, [v.name]), trustRow(v)]),
+        div({ class: "showroom-meta" }, [distRow(v)])
+      ]),
+      div({ class: "showroom-offers" }, v.offers.map((o) => el("span", { class: "offer" }, ["↳ " + o]))),
+      div({ class: "cat-row" }, v.categories.map((c) => catChip(c, false))),
+      demand,
+      rv ? div({ class: "review-teaser" }, [
+        stars(rv.rating),
+        el("span", { class: "muted small" }, ["\u201C" + rv.comment.slice(0, 46) + "\u201D"])
+      ]) : null,
+      btn("View catalog", { class: "btn ghost sm", dataset: { nav: "showroom", id: v.id } })
+    ]);
+  }
+
+  function searchBar() {
+    return div({ class: "search-wrap" }, [
+      el("span", { class: "search-icon", "aria-hidden": "true" }, ["⌕"]),
+      el("input", {
+        class: "input search-input", id: "fah-search", type: "search",
+        placeholder: "Search fabrics or showrooms…", value: searchQuery || "",
+        "aria-label": "Search fabrics or showrooms"
+      }),
+      searchQuery ? btn("Clear", { class: "btn tiny ghost", id: "fah-search-clear" }) : null
+    ]);
+  }
+
+  // Grouped, pit-of-love results: showrooms then fabrics, then a useful
+  // zero-results state with category shortcuts instead of a dead end.
+  function searchResults(res, q) {
+    const secs = [];
+    if (res.showrooms.length) {
+      secs.push(div({ class: "search-sec" }, [
+        el("h3", { class: "search-sec-cap" }, ["Showrooms (" + res.showrooms.length + ")"]),
+        div({ class: "list" }, res.showrooms.map(showroomCard))
+      ]));
+    }
+    if (res.fabrics.length) {
+      const fabll = div({ class: "list" });
+      res.fabrics.forEach((g) => g.items.forEach((it) => fabll.appendChild(fabricResultRow(it, g.category))));
+      secs.push(div({ class: "search-sec" }, [
+        el("h3", { class: "search-sec-cap" }, ["Fabrics (" + res.fabrics.length + ")"]),
+        fabll
+      ]));
+    }
+    if (!secs.length) {
+      secs.push(div({ class: "empty" }, [
+        el("p", {}, ["No matches for \u201C" + q + "\u201D."]),
+        el("p", { class: "muted small" }, ["Try \u201Cvelvet\u201D, \u201Cblackout\u201D, or an area like Koramangala."]),
+        div({ class: "chips" }, data.categories.map((c) =>
+          btn(c.name, { class: "chip", dataset: { nav: "category", id: c.id } })))
+      ]));
+    }
+    return div({ class: "stack search-results" }, secs);
+  }
+
+  function fabricResultRow(it, cat) {
+    let v = null;
+    const order = geoSorted() || S.getState().showrooms;
+    for (const vv of order) {
+      if ((data.showroomCatalog[vv.id] || []).includes(it.id)) { v = vv; break; }
+    }
+    return div({ class: "card fabric-card", dataset: v ? { nav: "showroom", id: v.id } : {} }, [
+      div({ class: "fabric-swatch-lg", style: "background:" + it.colors[0] }),
+      div({ class: "fabric-info" }, [
+        el("b", {}, [it.name]),
+        el("span", { class: "muted small" }, [it.material + " · " + it.pattern + (v ? " — from " + v.name : "")]),
+        el("span", { class: "price-tag" }, [S.fmtINR(it.pricePerMeter) + "/m"])
+      ])
+    ]);
   }
 
   function heroSection() {
@@ -707,6 +855,15 @@
   // ---- Render ------------------------------------------------------------------------
 
   function render() {
+    transitionRender(safeRender);
+  }
+  // No-view-transition render — for search keystrokes / GPS re-sorts where
+  // flashing motion per tick is worse than an instant update.
+  function quietRender() {
+    safeRender();
+  }
+
+  function applyRender() {
     const view = document.getElementById("view");
     const isHome = route.name === "home";
 
@@ -736,6 +893,9 @@
 
     document.getElementById("backBtn").hidden = isHome;
     document.body.classList.toggle("has-subview", !isHome);
+
+    // Accessibility: move focus to the shell after view swap (screen readers).
+    try { view.setAttribute("tabindex", "-1"); view.focus({ preventScroll: true }); } catch (e) {}
 
     wireEvents();
   }
@@ -773,6 +933,7 @@
       b.addEventListener("click", () => {
         const id = b.dataset.advance;
         const v = S.advanceVisit(id);
+        buzz(10);
         toast(v.status === "arrived" ? "Rep has arrived" : "Status updated");
         render();
       });
@@ -782,6 +943,7 @@
         const id = b.dataset.cancel;
         if (!window.confirm("Cancel this visit? It's free before the rep leaves.")) return;
         const v = S.cancelVisit(id);
+        buzz(8);
         toast(v && v.status === "cancelled" ? "Visit cancelled — no charges" : "Too late — rep is already en route");
         render();
       });
@@ -835,9 +997,38 @@
         if (sheet) sheet.hidden = true;
         window.FAHGeo.setManualArea(b.dataset.area);
         toast("Showing showrooms near " + b.dataset.area);
-        render();
+        quietRender();
       });
     });
+
+    // error-boundary reload
+    document.querySelectorAll("[data-reload]").forEach((b) => {
+      b.addEventListener("click", () => { _errBoundary = false; render(); });
+    });
+
+    // search: debounced, no view transition (keeps caret + input focus)
+    const sbar = document.getElementById("fah-search");
+    if (sbar) {
+      sbar.addEventListener("input", () => {
+        window.clearTimeout(sbar._t);
+        sbar._t = window.setTimeout(() => searchInPlace(sbar), 120);
+      });
+      sbar.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") { searchQuery = ""; searchInPlace(sbar); }
+      });
+      const sclear = document.getElementById("fah-search-clear");
+      if (sclear) sclear.addEventListener("click", () => { searchQuery = ""; searchInPlace(sbar); });
+    }
+  }
+
+  function searchInPlace(input) {
+    const caret = input ? (input.selectionStart != null ? input.selectionStart : input.value.length) : null;
+    searchQuery = input ? input.value : searchQuery;
+    quietRender();
+    const ni = document.getElementById("fah-search");
+    if (ni && caret != null) {
+      try { ni.focus(); ni.setSelectionRange(caret, caret); } catch (e) {}
+    }
   }
 
   function setShowroomTab(chip) {
@@ -865,6 +1056,7 @@
       { line: addr, pincode: pin, note: note || "" },
       new Date(slotBtn.dataset.slot)
     );
+    buzz(15);
     toast("Visit confirmed — rep on the way");
     navigate("live", { id: visit.id });
   }
@@ -882,6 +1074,7 @@
     });
     if (!selections.length) return toast("Select at least one fabric");
     const order = S.createOrder(v, selections);
+    buzz(18);
     toast("Deal recorded · " + S.fmtINR(order.commission) + " commission earned");
     navigate("live", { id: visitId });
   }
@@ -926,6 +1119,7 @@
     data.reviewDim.forEach((d) => { dims[d] = parseInt(readGrade(d), 10) || overall; });
     const comment = document.getElementById("rv-comment")?.value.trim() || "";
     S.createReview(v, overall, dims, comment);
+    buzz(12);
     toast("Review submitted — builds " + S.vendorById(v.showroomId)?.name + "'s trust score");
     navigate("live", { id: visitId });
   }
@@ -953,7 +1147,8 @@
 
     // GPS: request on load; re-render when it resolves (re-sorts showrooms).
     if (typeof window.FAHGeo !== "undefined") {
-      window.FAHGeo.request(() => {
+      window.FAHGeo.request((payload) => {
+        gpsResolved = true;
         const place = document.getElementById("hero-place");
         const chip = document.getElementById("hero-check");
         if (place) place.textContent = window.FAHGeo.placeLabel();
@@ -961,17 +1156,79 @@
           window.FAHGeo.status() === "live" ? "✓ Live GPS"
           : window.FAHGeo.status() === "denied" ? "GPS off"
           : "Locating…";
-        render();
+        if (route.name === "home") quietRender();
+      });
+    }
+
+    // Provider boot (IndexedDB local-first rehydrate) + offline + cross-tab sync
+    wirePullToRefresh();
+    updateOfflineBanner();
+    if (window.FAHProvider) {
+      window.FAHProvider.onSync(() => quietRender());
+      window.FAHProvider.onNetwork((off) => {
+        updateOfflineBanner(off);
+        if (off) toast("Offline — data stays on this device");
+        else toast("Back online — all synced");
+      });
+      window.FAHProvider.boot().then(() => {
+        updateOfflineBanner();
+        quietRender();
       });
     }
 
     render();
   });
 
+  // Pull-to-refresh (touch): re-read the durable/local copy on a home pull.
+  function wirePullToRefresh() {
+    const view = document.getElementById("view");
+    if (!view || typeof PointerEvent === "undefined") return;
+    let startY = null, active = false, ptr = null;
+    const ensurePtr = () => {
+      if (ptr) return ptr;
+      ptr = document.createElement("div");
+      ptr.className = "ptr";
+      ptr.textContent = "Pull to refresh";
+      document.body.appendChild(ptr);
+      return ptr;
+    };
+    view.addEventListener("touchstart", (e) => {
+      if (route.name !== "home" || (window.scrollY || 0) > 0) return;
+      const t = e.touches && e.touches[0];
+      if (t) startY = t.clientY;
+    }, { passive: true });
+    view.addEventListener("touchmove", (e) => {
+      if (startY == null || route.name !== "home") return;
+      const t = e.touches && e.touches[0];
+      if (!t) return;
+      const dy = t.clientY - startY;
+      if (dy > 0 && (window.scrollY || 0) <= 0) {
+        const p = ensurePtr();
+        p.style.transform = "translateY(" + Math.min(dy * 0.4, 64) + "px)";
+        active = dy > 72;
+        p.classList.toggle("is-armed", active);
+        p.textContent = active ? "Release to refresh" : "Pull to refresh";
+      }
+    }, { passive: true });
+    view.addEventListener("touchend", () => {
+      if (ptr) ptr.style.transform = "translateY(0)";
+      if (active) {
+        active = false;
+        buzz(12);
+        const p = window.FAHProvider ? window.FAHProvider.refresh() : Promise.resolve(null);
+        Promise.resolve(p)
+          .then(() => { quietRender(); toast("Refreshed"); })
+          .catch(() => toast("Refresh failed"));
+      }
+      startY = null;
+    }, { passive: true });
+  }
+
   // Test hook
   window.__FAH_APP__ = {
-    navigate, render,
+    navigate, render, quietRender, safeRender, searchInPlace,
     viewHome, viewCategory, viewShowroom, viewBook, viewLive, viewDeal, viewReview,
-    viewOrders, viewLegal
+    viewOrders, viewLegal,
+    get searchQuery() { return searchQuery; }
   };
 })();

@@ -45,12 +45,47 @@ Vendor/admin ops are covered by the Supabase backend schema in `backend/`.
 
 ```
 js/data.js        FAH — seeded catalog, vendors (with GPS coords), roles, 3% rate
-js/provider.js    storage adapter + auth/session (local mock now)
+js/search.js      FAHSearch — pure search/filter (fabrics, showrooms, zero-state)
+js/db.js          FAHDB — IndexedDB local-first layer (+ offline queue contract)
+js/provider.js    storage adapter + session (idb → local fallback), boot/refresh, multi-tab sync
 js/store.js       domain logic: visits, orders, commission split, settlements, reviews
 js/geo.js         real GPS + haversine distance + ETA + location states + area override
-js/app.js         SPA views + role wiring
+js/app.js         SPA views + search-first home, transitions, haptics, error boundary
 backend/          Supabase schema + RLS, Edge Functions, Razorpay Route, go-live README
 ```
+
+## Local-first data (research-aligned)
+
+- **Device owns the data.** The working copy lives in memory (instant reads),
+  durably mirrors to **IndexedDB** (`js/db.js`), and `localStorage` is only the
+  floor for file:// or headless environments. A full reload rehydrates from IDB.
+- **Multi-tab sync** via BroadcastChannel — a change in one tab refreshes the
+  others, the local-first "server is a sync peer" idea applied to tab replicas.
+- **Offline honesty.** An offline banner appears (no fake promises); the intact
+  local copy is what stays; a pull-to-refresh re-reads the durable copy.
+- **Backend-ready contract.** `FAHDB` keeps an offline mutation queue and the
+  provider exposes `boot/refresh/onSync/onNetwork` — the same surface the
+  Supabase adapter will use. Swapping `FH_BACKEND.enabled = true` wires the
+  network path with zero UI rewrite.
+
+## Search-enabled discovery
+
+Search-first entry on Home searches showrooms (name/area/offers) **and** fabrics
+(name/material/pattern) in real time with a useful zero-results state. Honest
+demand signals ("N deals this month") are computed from the local ledger.
+
+## PWA & accessibility (research-aligned)
+
+- Installable: manifest with `id`, 192/512 `any` + `maskable` icons, `lang`/`dir`,
+  `display_override`, app `shortcuts` (`#orders`, `#nearby` deep links).
+- **Accessible install & update bars** (`beforeinstallprompt` → real `<button>`;
+  new-version bar applies a waiting service worker on tap).
+- Service worker **v7**: split shell/runtime/page caches with
+  stale-while-revalidate + network-first navigation + offline shell fallback.
+- Skeleton shimmers during async loads, View Transitions (native + reduced-motion
+  fallback), pull-to-refresh, haptic ticks, focus management, `:focus-visible`
+  rings, WCAG-leaning contrast on primary actions.
+- Skip-link, main landmark focus on nav, screen-reader labels on app bar.
 
 ## GPS / location
 
@@ -91,6 +126,7 @@ on the server. See `backend/README.md`.
 node test_store.js    # 35 logic tests: booking, 3% split, cancel, settlements, install fee
 node test_dom.js      # 35 render tests: customer journey, every view, GPS
 node test_geo.js      # 10 GPS tests: haversine, distance, ETA, states, overrides
+node test_search.js   # 12 search tests: fabrics, showrooms, zero-results, case-insensitivity
 ```
 
 ## Design

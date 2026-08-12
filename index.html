@@ -60,20 +60,45 @@
       const btn = document.getElementById("install-btn");
       const dismiss = document.getElementById("install-dismiss");
       const announce = document.getElementById("toast");
+      const say = (m) => { announce.textContent = m; announce.hidden = false; setTimeout(() => { announce.hidden = true; }, 3000); };
       if (btn) btn.addEventListener("click", async () => {
         const p = window.__installPrompt;
         if (!p) return;
         try {
           const choice = await p.prompt();
           if (bar) bar.hidden = true;
-          if (announce) {
-            announce.textContent = choice.outcome === "accepted" ? "Installed — check your home screen." : "Install dismissed.";
-            announce.hidden = false;
-            setTimeout(() => { announce.hidden = true; }, 3000);
-          }
+          say(choice.outcome === "accepted" ? "Installed — check your home screen." : "Install dismissed.");
         } catch (e) {}
       });
       if (dismiss) dismiss.addEventListener("click", () => { if (bar) bar.hidden = true; });
+
+      // Update-available bar: apply a new service worker on tap (no data loss —
+      // local-first data lives in IndexedDB, which survives updates).
+      const upBar = document.getElementById("update-bar");
+      const upBtn = document.getElementById("update-btn");
+      const upDismiss = document.getElementById("update-dismiss");
+      const showUpdate = () => { if (upBar) upBar.hidden = false; };
+      if (upBtn) upBtn.addEventListener("click", async () => {
+        try {
+          const reg = await navigator.serviceWorker.getRegistration();
+          if (reg && reg.waiting) reg.waiting.postMessage({ type: "SKIP_WAITING" });
+          if (upBar) upBar.hidden = true;
+          say("Updated — reloading…");
+          setTimeout(() => location.reload(), 350);
+        } catch (e) { say("Update failed — pull once more."); }
+      });
+      if (upDismiss) upDismiss.addEventListener("click", () => { if (upBar) upBar.hidden = true; });
+      if ("serviceWorker" in navigator) {
+        let hadCtrl = !!navigator.serviceWorker.controller;
+        const showIfUpdate = () => { if (hadCtrl && upBar) upBar.hidden = false; };
+        navigator.serviceWorker.addEventListener("controllerchange", () => {
+          if (!hadCtrl) return; // first-ever activation, not an update
+          showIfUpdate();
+        });
+        navigator.serviceWorker.getRegistration().then((reg) => {
+          if (reg && reg.waiting && hadCtrl) showIfUpdate();
+        }).catch(() => {});
+      }
     });
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
@@ -81,7 +106,15 @@
       });
     }
   </script>
+  <div class="install-bar" id="update-bar" hidden>
+    <span>New version ready.</span>
+    <button class="btn tiny terracotta" id="update-btn" type="button">Update</button>
+    <button class="install-dismiss" id="update-dismiss" type="button" aria-label="Dismiss update prompt">×</button>
+  </div>
+
   <script src="js/data.js"></script>
+  <script src="js/search.js"></script>
+  <script src="js/db.js"></script>
   <script src="js/provider.js"></script>
   <script src="js/store.js"></script>
   <script src="js/geo.js"></script>

@@ -4,6 +4,7 @@
   "description": "Local marketplace: choose curtain & sofa fabric at home, a verified showroom rep arrives in ~30 min. Clear installation charges, no hidden fees.",
   "lang": "en-IN",
   "dir": "ltr",
+  "id": "./",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

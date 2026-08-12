@@ -557,3 +557,94 @@ body {
 /* ---- Cancel / danger ---- */
 .btn.danger { color: var(--accent-ink); }
 .btn.danger:active { background: #F3DDD4; }
+
+/* ---- Search (search-first marketplace entry) --------------------------- */
+.search-wrap {
+  position: sticky; top: 52px; z-index: 25;
+  display: flex; align-items: center; gap: 8px;
+  background: var(--bg);
+  padding: 8px 0 10px;
+  margin: -6px 0 2px;
+}
+.search-icon {
+  position: absolute; left: 14px; font-size: 16px; color: var(--ink-2);
+  pointer-events: none;
+}
+.search-input {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px; padding: 12px 14px 12px 38px;
+  box-shadow: var(--shadow);
+  color: var(--ink);
+}
+.search-input::placeholder { color: var(--muted); }
+.search-input:focus {
+  border-color: var(--accent); background: #fff;
+  box-shadow: 0 0 0 3px rgba(193,88,59,0.12);
+}
+.search-wrap .btn { flex-shrink: 0; }
+.search-results { gap: 14px; }
+.search-sec { display: flex; flex-direction: column; gap: 8px; }
+.search-sec-cap {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--muted);
+}
+.search-results .empty { margin-top: 6px; }
+.search-results .empty .chips { justify-content: center; margin-top: 12px; }
+
+/* ---- Demand signal (trust: honest "this month" deals) ------------------ */
+.demand { display: flex; align-items: center; gap: 6px; margin: 2px 0 6px; }
+
+/* ---- Skeleton loading shimmer (perceived performance) ------------------ */
+.sk { display: flex; flex-direction: column; gap: 10px; pointer-events: none; }
+.sk-line {
+  height: 12px; border-radius: 6px;
+  background: linear-gradient(90deg, var(--surface-2) 25%, #F2EEE5 37%, var(--surface-2) 63%);
+  background-size: 400% 100%;
+  animation: shimmer 1.4s ease infinite;
+}
+@keyframes shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: 0 0; }
+}
+
+/* ---- Offline banner (local-first honesty) ------------------------------ */
+.offline-banner {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  top: 0; z-index: 70; width: min(520px, 100vw);
+  background: var(--ink); color: var(--surface);
+  font-size: 12.5px; line-height: 1.4; text-align: center;
+  padding: 10px 18px; box-shadow: 0 6px 18px rgba(0,0,0,0.2);
+}
+.offline-banner[hidden] { display: none; }
+
+/* ---- Pull-to-refresh indicator ------------------------------------------ */
+.ptr {
+  position: fixed; left: 50%; top: 0; z-index: 65;
+  transform: translateX(-50%) translateY(-100%);
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 20px; padding: 6px 14px; font-size: 12px; font-weight: 600;
+  color: var(--ink-2); box-shadow: var(--shadow);
+  transition: transform 0.15s ease;
+}
+.ptr.is-armed { color: var(--accent-ink); }
+
+/* ---- View transitions (subtle, fast — native API + CSS fallback) ------- */
+.view.fade-in { animation: viewfade 0.18s ease; }
+@keyframes viewfade {
+  from { opacity: 0.55; transform: translateY(3px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .view.fade-in { animation: none; }
+  .sk-line { animation: none; background: var(--surface-2); }
+  .live-pulse, .live-pulse-lg { animation: none; }
+}
+::view-transition-old(root) { animation: viewfade-old 0.16s ease; }
+::view-transition-new(root) { animation: viewfade 0.2s ease; }
+@keyframes viewfade-old { from { opacity: 1; } to { opacity: 0.4; } }
+
+/* ---- Contrast hardening (data dense cards, WCAG-ish) -------------------- */
+.btn.primary { background: var(--accent-ink); }
+.btn.primary:active { background: #8E3A24; }
+.btn.primary:disabled { background: #B98A80; }
