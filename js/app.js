@@ -333,7 +333,7 @@
         el("p", { class: "muted small" }, ["Owner " + v.owner + " · GSTIN " + (v.gstin || "—")]),
         div({ class: "showroom-offers" }, v.offers.map((o) => el("span", { class: "offer" }, ["↳ " + o]))),
         div({ class: "sh-fee" }, [
-          el("span", {}, ["Installation"]),
+          el("span", {}, ["Fabric installation"]),
           el("b", {}, [S.fmtINR(v.installationFee || 0)]),
           el("span", { class: "muted small" }, ["additional, at deal"])
         ]),
@@ -463,7 +463,7 @@
       actions.appendChild(div({ class: "completed-box" }, [
         el("span", { class: "ok-icon" }, ["✓"]),
         el("span", {}, ["Visit completed"]),
-        v.dealId ? div({ class: "small muted", id: "completed-deal" }, ["You paid " + S.fmtINR(st.orders.find((o) => o.id === v.dealId)?.totalDue || st.orders.find((o) => o.id === v.dealId)?.lineTotal || 0) + " (incl. installation " + S.fmtINR(st.orders.find((o) => o.id === v.dealId)?.installationFee || 0) + ")"]) : null
+        v.dealId ? div({ class: "small muted", id: "completed-deal" }, ["You paid " + S.fmtINR(st.orders.find((o) => o.id === v.dealId)?.totalDue || st.orders.find((o) => o.id === v.dealId)?.lineTotal || 0) + " (incl. fabric installation " + S.fmtINR(st.orders.find((o) => o.id === v.dealId)?.installationFee || 0) + ")"]) : null
       ]));
       if (v.reviewId) {
         actions.appendChild(div({ class: "muted small centered" }, ["Thanks for the review."]));
@@ -551,7 +551,7 @@
       section("Selected fabrics", picker),
       section("Summary", div({ class: "card form deal-sum" }, [
         div({ class: "confirm-line" }, [el("span", {}, ["Fabrics"]), el("b", { id: "dl-total" }, ["₹0"])]),
-        div({ class: "confirm-line" }, [el("span", {}, ["Installation (additional)"]), el("b", { id: "dl-install" }, [S.fmtINR(installFee)])]),
+        div({ class: "confirm-line" }, [el("span", {}, ["Fabric installation (additional)"]), el("b", { id: "dl-install" }, [S.fmtINR(installFee)])]),
         div({ class: "confirm-line" }, [el("span", {}, ["Commission (3%)"]), el("b", { id: "dl-com" }, ["− ₹0"])]),
         div({ class: "confirm-line" }, [el("span", {}, ["You pay"]), el("b", { id: "dl-due" }, ["₹0"])]),
         div({ class: "confirm-line" }, [el("span", {}, ["Vendor gets"]), el("span", { id: "dl-vendor", class: "muted" }, ["₹0"])]),
@@ -681,7 +681,7 @@
           ]),
           div({ class: "muted small" }, [o.itemIds.map((i) => S.itemName(i)).join(", ")]),
           div({ class: "order-amounts" }, [
-            el("span", {}, ["You paid " + S.fmtINR(o.totalDue || o.lineTotal) + (o.installationFee ? " · incl. install +" + S.fmtINR(o.installationFee) : "")]),
+            el("span", {}, ["You paid " + S.fmtINR(o.totalDue || o.lineTotal) + (o.installationFee ? " · incl. fabric install +" + S.fmtINR(o.installationFee) : "")]),
             el("span", { class: "com-pos" }, ["Done ✓"])
           ]),
           (function () {
