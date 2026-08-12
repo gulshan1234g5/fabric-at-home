@@ -28,6 +28,7 @@ const ASSETS = [
   "./js/provider.js",
   "./js/store.js",
   "./js/geo.js",
+  "./js/route.js",
   "./js/app.js",
   "./icon.svg",
   "./icon-192.png",

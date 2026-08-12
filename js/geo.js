@@ -161,6 +161,7 @@
     refresh: request,
     status,
     placeLabel,
+    origin,
     distanceToVendor,
     minsAwayTo,
     sortedShowrooms,

@@ -50,6 +50,7 @@
     } catch (e) {
       if (_errBoundary) return; // avoid infinite loop on a broken fallback
       _errBoundary = true;
+      try { console.error("Render error:", e); } catch (_e) {}
       const view = document.getElementById("view");
       if (view) {
         view.replaceChildren(div({ class: "empty" }, [
@@ -113,13 +114,52 @@
       v.insured ? el("span", { class: "badge-insured" }, ["Insured"]) : null
     ]);
   }
-  function distRow(v) {
-    const km = geoDistance(v);
-    return div({ class: "dist" }, [
-      el("span", { class: "dot" }),
-      el("span", {}, [km + " km"]),
-      el("span", { class: "muted" }, ["· ~" + geoMins(v) + " min away"])
-    ]);
+function distRow(v) {
+    const mEl = el("span", { id: "dist-m-" + v.id }, [""]);
+    const eEl = el("span", { class: "muted small", id: "dist-e-" + v.id }, [""]);
+    // Instant road-estimate placeholder, then OSRM exact distance fills in place.
+    const estM = Math.round(geoDistance(v) * 1000);
+    const estMin = geoMins(v);
+    mEl.textContent = fmtMeters(estM);
+    eEl.textContent = "· ~" + estMin + " min away";
+    scheduleRoute(v, mEl, eEl);
+    return div({ class: "dist" }, [el("span", { class: "dot" }), mEl, eEl]);
+  }
+  function fmtMeters(m) {
+    return m < 1000 ? Math.round(m) + " m" : (m / 1000).toFixed(1) + " km";
+  }
+  // Showroom hero "arrival in ~X min" filled with the exact OSRM ETA.
+  function setupShowroomEta(v) {
+    if (!window.FAHRoute || typeof v.lat !== "number" || typeof v.lng !== "number") return;
+    const o = window.FAHGeo ? window.FAHGeo.origin() : null;
+    if (!o || typeof o.lat !== "number" || typeof o.lng !== "number") return;
+    const fill = (r) => {
+      if (!r) return;
+      const sh = document.getElementById("sh-eta-" + v.id);
+      if (sh) sh.textContent = "Rep available now — arrival in " + window.FAHRoute.fmtEta(r.durationS) + " from slot";
+    };
+    const cached = window.FAHRoute.peek(v.lat, v.lng, o);
+    if (cached) { fill(cached); return; }
+    window.FAHRoute.route(o.lat, o.lng, v.lat, v.lng).then(fill).catch(() => {});
+  }
+  // Ask OSRM for the exact road route; update the card in place (no re-render,
+  // no scroll jump). Reads cache first so later re-renders are instant.
+  function scheduleRoute(v, mEl, eEl) {
+    if (!window.FAHRoute || typeof v.lat !== "number" || typeof v.lng !== "number") return;
+    const o = window.FAHGeo ? window.FAHGeo.origin() : null;
+    if (!o || typeof o.lat !== "number" || typeof o.lng !== "number") return;
+    const fill = (r) => {
+      if (!r) return;
+      const m = document.getElementById("dist-m-" + v.id);
+      const e = document.getElementById("dist-e-" + v.id);
+      if (m) m.textContent = window.FAHRoute.fmtDistance(r.distanceM);
+      if (e) e.textContent = "· " + window.FAHRoute.fmtEta(r.durationS) + " away";
+      const sh = document.getElementById("sh-eta-" + v.id);
+      if (sh) sh.textContent = window.FAHRoute.fmtEta(r.durationS) + " from slot";
+    };
+    const cached = window.FAHRoute.peek(v.lat, v.lng, o);
+    if (cached) { fill(cached); return; }
+    window.FAHRoute.route(o.lat, o.lng, v.lat, v.lng).then(fill).catch(() => {});
   }
   // wrap geo so tests without FAHGeo stay safe
   function geoDistance(v) {
@@ -425,6 +465,7 @@ function geoLocating() {
     if (!v) return emptyState("Showroom not found.");
     const st = S.getState();
     const items = S.itemsFor(v, null);
+    setupShowroomEta(v);
     const byCat = {};
     items.forEach((it) => {
       const c = Object.keys(data.catalog).find((k) => data.catalog[k].includes(it));
@@ -494,7 +535,7 @@ function geoLocating() {
         btn("Book a home visit", { class: "btn primary", dataset: { nav: "book", id } }),
         div({ class: "sh-promise" }, [
           el("span", { class: "live-pulse" }),
-          el("span", { class: "small" }, ["Rep available now — arrival in ~" + v.minsAway + " min from slot"])
+          el("span", { class: "small", id: "sh-eta-" + id }, ["Rep available now — arrival in ~" + v.minsAway + " min from slot"])
         ])
       ]),
       tabs,

@@ -50,6 +50,7 @@ js/db.js          FAHDB — IndexedDB local-first layer (+ offline queue contrac
 js/provider.js    storage adapter + session (idb → local fallback), boot/refresh, multi-tab sync
 js/store.js       domain logic: visits, orders, commission split, settlements, reviews
 js/geo.js         real GPS + haversine distance + ETA + location states + area override
+js/route.js       OSRM road routing — exact distance & ETA (Uber/Rapido-style)
 js/app.js         SPA views + search-first home, transitions, haptics, error boundary
 backend/          Supabase schema + RLS, Edge Functions, Razorpay Route, go-live README
 ```
@@ -99,6 +100,24 @@ demand signals ("N deals this month") are computed from the local ledger.
   area overrides (virtual origin) so discovery always works.
 - Plain `GPS off` labels never claim a fix they don't have.
 
+## Exact distance & ETA (Uber/Rapido-style)
+
+`js/route.js` routes on the **real OpenStreetMap road network** via the free
+OSRM demo server (no API key, CORS open, `router.project-osrm.org`). Showroom
+cards and the showroom hero show the **exact road-surface distance + driving
+ETA** ("2.4 km · ~5 min away") instead of a crow-flies estimate.
+
+Honest degrade chain (never a fake figure):
+1. **OSRM route** — exact fastest-road distance & duration (labelled `osrm`).
+2. **Cache** — session memory + `localStorage` (6h TTL; vendor coords are static).
+3. **Estimate** — haversine × 1.3 road factor + 20 km/h, shown instantly while
+   routing resolves (labelled `estimate`), then swapped in place — no reload,
+   no scroll jump.
+
+Politeness: ≤4 OSRM hits/sec, single in-flight per pair, ~7s AbortController
+timeout. The shared demo server is fine for V1; for scale, self-host OSRM
+(Project-OSRM Docker) with the same URL shape.
+
 ## PWA & accessibility (research-aligned)
 
 - Installable: manifest with 192/512 `any` + `maskable` icons, `lang`/`dir`,
@@ -127,6 +146,7 @@ node test_store.js    # 35 logic tests: booking, 3% split, cancel, settlements, 
 node test_dom.js      # 35 render tests: customer journey, every view, GPS
 node test_geo.js      # 10 GPS tests: haversine, distance, ETA, states, overrides
 node test_search.js   # 12 search tests: fabrics, showrooms, zero-results, case-insensitivity
+node test_route.js    # 16 routing tests: OSRM mock, cache/dedupe, fallback, formatting
 ```
 
 ## Design
