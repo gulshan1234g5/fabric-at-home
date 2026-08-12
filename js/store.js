@@ -125,6 +125,18 @@
   const STATUS_FLOW = ["assigned", "on-the-way", "arrived", "completed"];
   let crewCounter = 0;
 
+  // Cancel a visit — only while still "assigned" (before rep leaves).
+  function cancelVisit(visitId) {
+    const s = getState();
+    const v = s.visits.find((x) => x.id === visitId);
+    if (!v) return null;
+    if (v.status !== "assigned") return v; // free cancellation promise: only pre-dispatch
+    v.status = "cancelled";
+    v.cancelledAt = new Date().toISOString();
+    save(s);
+    return v;
+  }
+
   function createVisit(showroomId, customer, address, slot) {
     const s = getState();
     const id = "v-" + (1000 + s.visits.length + Date.now().toString(36));
@@ -173,14 +185,20 @@
 
   function createOrder(visit, selections) {
     const s = getState();
+    const vendor = s.showrooms.find((x) => x.id === visit.showroomId) || {};
     const lineTotal = selections.reduce((t, sel) => t + itemAmount(sel.itemId, visit.showroomId) * sel.qty, 0);
+    const installationFee = typeof vendor.installationFee === "number" ? vendor.installationFee : 0;
+    const totalDue = lineTotal + installationFee;
     const commission = Math.round(lineTotal * FAH.COMMISSION_RATE);
     const order = {
       id: "o-" + (2000 + s.orders.length + 1) + "-" + Date.now().toString(36),
       visitId: visit.id, showroomId: visit.showroomId,
       itemIds: selections.map((x) => x.itemId),
-      lineTotal, commissionRate: FAH.COMMISSION_RATE,
-      commission, vendorShare: lineTotal - commission,
+      lineTotal, installationFee, totalDue,
+      commissionRate: FAH.COMMISSION_RATE,
+      commission,
+      // vendor keeps fabric minus commission + full installation fee
+      vendorShare: (lineTotal - commission) + installationFee,
       createdAt: new Date().toISOString(), status: "completed"
     };
     s.orders.unshift(order);
@@ -190,7 +208,7 @@
     // Payment + settlement record (T+1 vendor settlement) — same state object
     const payment = {
       id: "p-" + (1000 + s.payments.length + Date.now().toString(36)),
-      visitId: visit.id, amount: lineTotal, method: "UPI", status: "paid",
+      visitId: visit.id, amount: totalDue, method: "UPI", status: "paid",
       createdAt: new Date().toISOString()
     };
     s.payments.unshift(payment);
@@ -302,7 +320,7 @@
   window.FAHStore = {
     getState, save,
     vendorById, itemAmount, itemsFor, itemName, categoryName,
-    createVisit, advanceVisit, createPayment,
+    createVisit, advanceVisit, cancelVisit, createPayment,
     createOrder, totalCommission, ordersFor,
     reviewsFor, createReview,
     vendorEarnings, settlementsFor, settleStats,

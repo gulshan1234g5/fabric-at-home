@@ -1,5 +1,5 @@
 // FabricAtHome service worker — offline cache + installable PWA.
-const CACHE = "fah-v4";
+const CACHE = "fah-v5";
 const ASSETS = [
   "./index.html",
   "./css/styles.css",
@@ -11,7 +11,8 @@ const ASSETS = [
   "./manifest.json",
   "./icon.svg",
   "./icon-192.png",
-  "./icon-512.png"
+  "./icon-512.png",
+  "./icon-512-maskable.png"
 ];
 
 self.addEventListener("install", (e) => {

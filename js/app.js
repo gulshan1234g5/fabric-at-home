@@ -332,6 +332,11 @@
         distRow(v),
         el("p", { class: "muted small" }, ["Owner " + v.owner + " · GSTIN " + (v.gstin || "—")]),
         div({ class: "showroom-offers" }, v.offers.map((o) => el("span", { class: "offer" }, ["↳ " + o]))),
+        div({ class: "sh-fee" }, [
+          el("span", {}, ["Installation"]),
+          el("b", {}, [S.fmtINR(v.installationFee || 0)]),
+          el("span", { class: "muted small" }, ["additional, at deal"])
+        ]),
         div({ class: "sh-stats" }, [
           statCell(v.rating.toFixed(1), "rating"),
           statCell(v.deals, "deals done"),
@@ -412,6 +417,23 @@
     const crew = data.crews.find((c) => c.id === v.crewId);
     const flow = ["assigned", "on-the-way", "arrived"];
 
+    if (v.status === "cancelled") {
+      return div({ class: "stack" }, [
+        div({ class: "completed-box" }, [
+          el("span", { class: "ok-icon" }, ["—"]),
+          el("span", {}, ["Visit cancelled"]),
+          el("div", { class: "small muted" }, ["No charges. Book again anytime."]),
+          btn("Back to home", { class: "btn ghost", dataset: { nav: "home" } })
+        ]),
+        section("Visit details", div({ class: "card form detail-grid" }, [
+          infoCell("Showroom", vd ? vd.name : ""),
+          infoCell("Status", "cancelled"),
+          infoCell("Slot", S.fmtSlot(v.slot)),
+          infoCell("Address", v.address.line + ", " + v.address.pincode)
+        ]))
+      ]);
+    }
+
     const tl = div({ class: "timeline" });
     flow.forEach((stage) => {
       const done = S.STATUS_FLOW.indexOf(v.status) > flow.indexOf(stage);
@@ -431,6 +453,9 @@
         class: "btn ghost", dataset: { advance: id }
       }));
     }
+    if (v.status === "assigned") {
+      actions.appendChild(btn("Cancel visit — free before rep leaves", { class: "btn ghost danger", dataset: { cancel: id } }));
+    }
     if (v.status === "arrived" && !v.dealId) {
       actions.appendChild(btn("Record deal — UPI payment", { class: "btn primary lg", dataset: { nav: "deal", id } }));
     }
@@ -438,7 +463,7 @@
       actions.appendChild(div({ class: "completed-box" }, [
         el("span", { class: "ok-icon" }, ["✓"]),
         el("span", {}, ["Visit completed"]),
-        v.dealId ? div({ class: "small muted" }, ["Deal " + S.fmtINR(st.orders.find((o) => o.id === v.dealId)?.lineTotal || 0) + " · commission split applied"]) : null
+        v.dealId ? div({ class: "small muted", id: "completed-deal" }, ["You paid " + S.fmtINR(st.orders.find((o) => o.id === v.dealId)?.totalDue || st.orders.find((o) => o.id === v.dealId)?.lineTotal || 0) + " (incl. installation " + S.fmtINR(st.orders.find((o) => o.id === v.dealId)?.installationFee || 0) + ")"]) : null
       ]));
       if (v.reviewId) {
         actions.appendChild(div({ class: "muted small centered" }, ["Thanks for the review."]));
@@ -497,6 +522,7 @@
     if (!v || v.status !== "arrived") return emptyState("Visit not open for recording.");
     const vd = S.vendorById(v.showroomId);
     const items = S.itemsFor(vd, null);
+    const installFee = typeof vd.installationFee === "number" ? vd.installationFee : 0;
 
     const picker = div({ class: "list" });
     items.forEach((it) => {
@@ -524,8 +550,10 @@
       ]),
       section("Selected fabrics", picker),
       section("Summary", div({ class: "card form deal-sum" }, [
-        div({ class: "confirm-line" }, [el("span", {}, ["Line total"]), el("b", { id: "dl-total" }, ["₹0"])]),
-        div({ class: "confirm-line" }, [el("span", {}, ["Commission (3%)"]), el("b", { id: "dl-com" }, ["₹0"])]),
+        div({ class: "confirm-line" }, [el("span", {}, ["Fabrics"]), el("b", { id: "dl-total" }, ["₹0"])]),
+        div({ class: "confirm-line" }, [el("span", {}, ["Installation (additional)"]), el("b", { id: "dl-install" }, [S.fmtINR(installFee)])]),
+        div({ class: "confirm-line" }, [el("span", {}, ["Commission (3%)"]), el("b", { id: "dl-com" }, ["− ₹0"])]),
+        div({ class: "confirm-line" }, [el("span", {}, ["You pay"]), el("b", { id: "dl-due" }, ["₹0"])]),
         div({ class: "confirm-line" }, [el("span", {}, ["Vendor gets"]), el("span", { id: "dl-vendor", class: "muted" }, ["₹0"])]),
         btn("Confirm deal & pay UPI", { class: "btn primary lg", id: "dl-submit", dataset: { finalize: visitId } })
       ]))
@@ -653,8 +681,8 @@
           ]),
           div({ class: "muted small" }, [o.itemIds.map((i) => S.itemName(i)).join(", ")]),
           div({ class: "order-amounts" }, [
-            el("span", {}, ["Deal " + S.fmtINR(o.lineTotal)]),
-            el("span", { class: "com-pos" }, ["+ " + S.fmtINR(o.commission) + " (3%)"])
+            el("span", {}, ["You paid " + S.fmtINR(o.totalDue || o.lineTotal) + (o.installationFee ? " · incl. install +" + S.fmtINR(o.installationFee) : "")]),
+            el("span", { class: "com-pos" }, ["Done ✓"])
           ]),
           (function () {
             if (visit && !visit.reviewId) {
@@ -746,6 +774,15 @@
         const id = b.dataset.advance;
         const v = S.advanceVisit(id);
         toast(v.status === "arrived" ? "Rep has arrived" : "Status updated");
+        render();
+      });
+    });
+    document.querySelectorAll("[data-cancel]").forEach((b) => {
+      b.addEventListener("click", () => {
+        const id = b.dataset.cancel;
+        if (!window.confirm("Cancel this visit? It's free before the rep leaves.")) return;
+        const v = S.cancelVisit(id);
+        toast(v && v.status === "cancelled" ? "Visit cancelled — no charges" : "Too late — rep is already en route");
         render();
       });
     });
@@ -855,13 +892,17 @@
       const qty = parseInt(card.querySelector("[data-qty-out]").textContent, 10) || 0;
       total += qty * (parseInt(card.dataset.price, 10) || 0);
     });
+    const install = document.getElementById("dl-install");
+    const installFee = install ? parseInt(install.textContent.replace(/[^0-9]/g, ""), 10) || 0 : 0;
     const com = Math.round(total * FAH.COMMISSION_RATE);
     const t = document.getElementById("dl-total");
     const c = document.getElementById("dl-com");
+    const due = document.getElementById("dl-due");
     const vdEl = document.getElementById("dl-vendor");
     if (t) t.textContent = S.fmtINR(total);
     if (c) c.textContent = "− " + S.fmtINR(com);
-    if (vdEl) vdEl.textContent = S.fmtINR(total - com);
+    if (due) due.textContent = S.fmtINR(total + installFee);
+    if (vdEl) vdEl.textContent = S.fmtINR((total - com) + installFee);
   }
 
   function selectGrade(btn) {
@@ -900,6 +941,15 @@
     document.getElementById("tab-home").addEventListener("click", () => navigate("home"));
     document.getElementById("tab-work").addEventListener("click", () => navigate("orders"));
     document.getElementById("tab-about").addEventListener("click", () => navigate("legal", { id: "terms" }));
+
+    // Install-shortcut deep links (#orders, #nearby) + history back
+    const routeFromHash = () => {
+      const h = location.hash;
+      if (h === "#orders") navigate("orders");
+      else if (h === "#nearby" || h === "#home") navigate("home");
+    };
+    window.addEventListener("hashchange", routeFromHash);
+    routeFromHash();
 
     // GPS: request on load; re-render when it resolves (re-sorts showrooms).
     if (typeof window.FAHGeo !== "undefined") {

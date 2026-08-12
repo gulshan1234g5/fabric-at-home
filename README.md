@@ -21,7 +21,8 @@ offline after first load (service worker caches all assets).
 
 | Layer | What it does |
 |---|---|
-| **Customer flow** | Location-first discovery (real GPS), 4 categories, trust cards (rating·deals·Verified), 3-step booking (address → 30-min slot → confirm), live status (assigned → on-the-way → arrived), deal recording + UPI, post-visit review |
+| **Customer flow** | Location-first discovery (real GPS), 4 categories, trust cards (rating·deals·Verified), 3-step booking (address → 30-min slot → confirm), live status (assigned → on-the-way → arrived), free cancellation before the rep leaves, deal recording + UPI, post-visit review |
+| **Clear pricing** | Every showroom shows its **installation charge** (₹ADJUST additional, never free); deal summary itemises fabrics → installation → total you pay. Our 3% is charged to the showroom, never hidden in your price |
 | **Trust engine** | Rating + count on every card, Verified/Insured badges, 3-dimension reviews (punctuality/quality/communication), review teasers |
 | **Payments** | UPI at completion; vendor pays 3% commission (never hidden in your price); T+1 settlement records; Razorpay Route scaffolding in `backend/` |
 | **Legal** | DPDP-lean privacy policy + terms of use (Discover → About) |
@@ -63,6 +64,21 @@ backend/          Supabase schema + RLS, Edge Functions, Razorpay Route, go-live
   area overrides (virtual origin) so discovery always works.
 - Plain `GPS off` labels never claim a fix they don't have.
 
+## PWA & accessibility (research-aligned)
+
+- Installable: manifest with 192/512 `any` + `maskable` icons, `lang`/`dir`,
+  `display_override`, app `shortcuts` (`#orders`, `#nearby` deep links).
+- **Accessible install button** (`beforeinstallprompt` → real `<button>` with
+  `aria-disabled` + polite `role="status"` announce on accept/dismiss).
+- Skip-link, `:focus-visible` rings, main landmark focus on nav, screen-reader
+  labels on app bar. Offline via service worker (cache-first, v5).
+
+## Cancellation
+
+Free cancels while a visit is still **assigned** (before the rep leaves);
+once **on-the-way** or later, cancellation isn't allowed — stated in-terms and
+enforced in the store (`cancelVisit` guard).
+
 **Taking it live:** the DB schema in `backend/schema.sql` mirrors the JS
 contract exactly. Create a Supabase project, run the SQL, deploy the edge
 functions, add your Razorpay keys, then flip `window.FH_BACKEND.enabled` in
@@ -72,8 +88,8 @@ on the server. See `backend/README.md`.
 ## Tests
 
 ```sh
-node test_store.js    # 29 logic tests: booking, 3% split, settlements, reviews
-node test_dom.js      # 31 render tests: customer journey, every view, GPS
+node test_store.js    # 35 logic tests: booking, 3% split, cancel, settlements, install fee
+node test_dom.js      # 35 render tests: customer journey, every view, GPS
 node test_geo.js      # 10 GPS tests: haversine, distance, ETA, states, overrides
 ```
 
