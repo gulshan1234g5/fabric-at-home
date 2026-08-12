@@ -498,3 +498,18 @@ body {
 .legal-line { padding: 8px 0; border-bottom: 1px dashed var(--line); }
 .legal-line:last-child { border-bottom: none; }
 .legal-line p { margin-top: 3px; line-height: 1.55; }
+
+/* ---- Location sheet ---- */
+.loc-sheet {
+  margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 10px;
+}
+.loc-sheet[hidden] { display: none; }
+.loc-sheet-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 8px; }
+.loc-row {
+  display: flex; align-items: center; gap: 10px; font-size: 13.5px;
+  background: var(--surface-2); border-radius: var(--radius-sm); padding: 10px 12px;
+}
+.loc-row .btn { margin-left: auto; }
+.loc-section-cap { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin: 10px 0 6px; }
+.loc-areas { display: flex; flex-wrap: wrap; gap: 8px; }
+.hero-place { font-weight: 600; }

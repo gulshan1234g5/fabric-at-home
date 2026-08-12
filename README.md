@@ -39,12 +39,25 @@ Account → role switcher (`Account` tab):
 ## Architecture
 
 ```
-js/data.js        FAH — seeded catalog, vendors, roles, crews, 3% rate
+js/data.js        FAH — seeded catalog, vendors (with GPS coords), roles, 3% rate
 js/provider.js    storage adapter + auth/session (local mock now)
 js/store.js       domain logic: visits, orders, commission split, settlements, reviews
+js/geo.js         real GPS + haversine distance + ETA + location states + area override
 js/app.js         SPA views + role wiring
 backend/          Supabase schema + RLS, Edge Functions, Razorpay Route, go-live README
 ```
+
+## GPS / location
+
+- On the **live site (https)** `navigator.geolocation` runs for real: showrooms
+  are sorted by your actual position, distances computed by haversine × 1.3
+  road factor, ETA from a 20 km/h urban assumption, and the hero label is
+  reverse-geocoded (free BigDataCloud, no key).
+- **Status chip** in the hero shows `Locating…` → `✓ Live GPS` → `GPS off`.
+- **file:// or permission-denied** → graceful fallback to the default area;
+  the "Change" link opens a sheet with **Use my current location** + 4 manual
+  area overrides (virtual origin) so discovery always works.
+- Plain `GPS off` labels never claim a fix they don't have.
 
 **Taking it live:** the DB schema in `backend/schema.sql` mirrors the JS
 contract exactly. Create a Supabase project, run the SQL, deploy the edge
@@ -56,7 +69,8 @@ on the server. See `backend/README.md`.
 
 ```sh
 node test_store.js    # 29 logic tests: booking, 3% split, settlements, reviews
-node test_dom.js      # 31 render tests: every view, every role, full journey
+node test_dom.js      # 34 render tests: every view, every role, full journey
+node test_geo.js      # 10 GPS tests: haversine, distance, ETA, states, overrides
 ```
 
 ## Design

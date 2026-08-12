@@ -62,11 +62,25 @@
     ]);
   }
   function distRow(v) {
+    const km = geoDistance(v);
     return div({ class: "dist" }, [
       el("span", { class: "dot" }),
-      el("span", {}, [v.distanceKm + " km"]),
-      el("span", { class: "muted" }, ["· ~" + v.minsAway + " min away"])
+      el("span", {}, [km + " km"]),
+      el("span", { class: "muted" }, ["· ~" + geoMins(v) + " min away"])
     ]);
+  }
+  // wrap geo so tests without FAHGeo stay safe
+  function geoDistance(v) {
+    if (typeof window.FAHGeo !== "undefined") return window.FAHGeo.distanceToVendor(v).toFixed(1);
+    return v.distanceKm;
+  }
+  function geoMins(v) {
+    if (typeof window.FAHGeo !== "undefined") return window.FAHGeo.minsAwayTo(v);
+    return v.minsAway || 10;
+  }
+  function geoSorted() {
+    if (typeof window.FAHGeo !== "undefined") return window.FAHGeo.sortedShowrooms();
+    return null; // caller falls back to seed
   }
   function swatchRow(colors) {
     const sw = div({ class: "swatches" });
@@ -103,7 +117,8 @@
     const st = S.getState();
     const isVendor = P.isRole("vendor");
     const isAdmin = P.isRole("admin");
-    const sortable = [...st.showrooms].sort((a, b) => a.distanceKm - b.distanceKm);
+    const geoList = geoSorted();
+    const sortable = geoList || [...st.showrooms].sort((a, b) => a.distanceKm - b.distanceKm);
     const activeVisits = st.visits.filter((v) => v.status !== "completed");
 
     const catGrid = div({ class: "cat-grid" });
@@ -183,11 +198,12 @@
   }
 
   function heroSection() {
+    const loc = heroLocationWidget();
     return div({ class: "hero" }, [
       div({ class: "hero-head" }, [
         el("span", { class: "pin" }, ["⌖"]),
-        el("span", {}, ["Koramangala, Bengaluru"]),
-        el("span", { class: "hero-check" }, ["✓ GPS"]),
+        el("span", { class: "hero-place", id: "hero-place" }, [loc.place]),
+        el("span", { class: "hero-check", id: "hero-check" }, [loc.chip]),
         el("a", { class: "link small", href: "#", dataset: { reloc: "1" } }, ["Change"])
       ]),
       el("h2", {}, ["Fabric, brought to your home."]),
@@ -199,8 +215,40 @@
       div({ class: "hero-cta" }, [
         el("span", { class: "promise-num" }, ["~30"]),
         el("span", { class: "small muted" }, ["min avg. arrival at your booked slot"])
-      ])
+      ]),
+      locationSheet()
     ]);
+  }
+
+  function heroLocationWidget() {
+    if (typeof window.FAHGeo === "undefined") return { place: "Koramangala, Bengaluru", chip: "Offline" };
+    const g = window.FAHGeo;
+    const st = g.status();
+    if (st === "live") return { place: g.placeLabel(), chip: "✓ Live GPS" };
+    if (st === "denied") return { place: g.placeLabel() + " (default)", chip: "GPS off" };
+    return { place: g.placeLabel(), chip: "Locating…" };
+  }
+
+  function locationSheet() {
+    if (typeof window.FAHGeo === "undefined") return null;
+    const g = window.FAHGeo;
+    const areas = g.predefinedAreas();
+    return div({ class: "loc-sheet", id: "loc-sheet", hidden: true }, [
+      el("div", { class: "loc-sheet-title" }, ["Your location"]),
+      div({ class: "loc-row", dataset: { usegps: "1" } }, [
+        el("span", { class: "live-pulse" }),
+        el("span", {}, ["Use my current location (GPS)"]),
+        btn("Use", { class: "btn tiny terracotta", dataset: { usegps: "1" } })
+      ]),
+      el("div", { class: "loc-section-cap" }, ["Or pick an area (manual override)"]),
+      div({ class: "loc-areas" },
+        areas.map((a) => btn(a, { class: "btn ghost sm", dataset: { area: a } })))
+    ]);
+  }
+
+  function placeLabel() {
+    if (typeof window.FAHGeo === "undefined") return "Koramangala, Bengaluru";
+    return window.FAHGeo.placeLabel() + (window.FAHGeo.status() === "denied" ? " (default)" : "");
   }
 
   // ---- View: CATEGORY --------------------------------------------------------
@@ -942,9 +990,34 @@
       });
     });
 
-    // relocation link
+    // location: Change toggle + GPS use + manual area pick
     document.querySelectorAll("[data-reloc]").forEach((a) => {
-      a.addEventListener("click", (e) => { e.preventDefault(); toast("Location change — coming with the backend"); });
+      a.addEventListener("click", (e) => {
+        e.preventDefault();
+        const sheet = document.getElementById("loc-sheet");
+        if (sheet) sheet.hidden = !sheet.hidden;
+        else toast("Location — coming with the backend");
+      });
+    });
+    document.querySelectorAll("[data-usegps]").forEach((b) => {
+      b.addEventListener("click", () => {
+        if (typeof window.FAHGeo === "undefined") return toast("GPS unavailable here");
+        const sheet = document.getElementById("loc-sheet");
+        if (sheet) sheet.hidden = true;
+        window.FAHGeo.clearManual();
+        window.FAHGeo.request(() => render());
+        toast("Finding your location…");
+      });
+    });
+    document.querySelectorAll("[data-area]").forEach((b) => {
+      b.addEventListener("click", () => {
+        if (typeof window.FAHGeo === "undefined") return;
+        const sheet = document.getElementById("loc-sheet");
+        if (sheet) sheet.hidden = true;
+        window.FAHGeo.setManualArea(b.dataset.area);
+        toast("Showing showrooms near " + b.dataset.area);
+        render();
+      });
     });
   }
 
@@ -1051,6 +1124,21 @@
       else navigate("orders");
     });
     document.getElementById("tab-acct").addEventListener("click", () => navigate("account"));
+
+    // GPS: request on load; re-render when it resolves (re-sorts showrooms).
+    if (typeof window.FAHGeo !== "undefined") {
+      window.FAHGeo.request(() => {
+        const place = document.getElementById("hero-place");
+        const chip = document.getElementById("hero-check");
+        if (place) place.textContent = window.FAHGeo.placeLabel();
+        if (chip) chip.textContent =
+          window.FAHGeo.status() === "live" ? "✓ Live GPS"
+          : window.FAHGeo.status() === "denied" ? "GPS off"
+          : "Locating…";
+        render();
+      });
+    }
+
     render();
   });
 

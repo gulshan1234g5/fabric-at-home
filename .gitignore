@@ -1,5 +1,6 @@
 test_dom.js
 test_store.js
+test_geo.js
 test_browser.js
 make_icons.py
 send_telegram.py

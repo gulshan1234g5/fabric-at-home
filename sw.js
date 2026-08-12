@@ -1,11 +1,12 @@
 // FabricAtHome service worker — offline cache + installable PWA.
-const CACHE = "fah-v2";
+const CACHE = "fah-v3";
 const ASSETS = [
   "./index.html",
   "./css/styles.css",
   "./js/data.js",
   "./js/store.js",
   "./js/provider.js",
+  "./js/geo.js",
   "./js/app.js",
   "./manifest.json",
   "./icon.svg",

@@ -45,18 +45,21 @@ const FAH = {
 
   // --- Vendors (showrooms belong to vendors) -------------------------------
   // KYC-style trust surface: GSTIN, verification status, insurance, ratings.
+  // lat/lng = real Bengaluru locations (used for live GPS distance + sort).
+  DEFAULT_PLACE: { lat: 12.9352, lng: 77.6245, label: "Koramangala, Bengaluru" },
+
   vendors: [
     { id: "v1", name: "Thar Interior Studio", owner: "Manish Thar",  phone: "+91 98xxx 1001", gstin: "29ABCDE1234F1Z5", verified: true,  insured: true,
-      area: "Sector 15, Koramangala", distanceKm: 1.2, minsAway: 9, rating: 4.8, deals: 240, established: 2014,
+      area: "Sector 15, Koramangala", lat: 12.9345, lng: 77.6161, distanceKm: 1.2, minsAway: 9, rating: 4.8, deals: 240, established: 2014,
       categories: ["curtains", "sofa", "blinds"], offers: ["Free floor sample", "Free installation"] },
     { id: "v2", name: "Weave & Wick",          owner: "Sneha Wick",   phone: "+91 98xxx 1002", gstin: "29BCDEF2345G2Z6", verified: true,  insured: true,
-      area: "Indiranagar 100ft Rd", distanceKm: 2.6, minsAway: 14, rating: 4.6, deals: 132, established: 2019,
+      area: "Indiranagar 100ft Rd", lat: 12.9719, lng: 77.6412, distanceKm: 2.6, minsAway: 14, rating: 4.6, deals: 132, established: 2019,
       categories: ["curtains", "sofa", "upholstery"], offers: ["Custom stitching in 48h"] },
     { id: "v3", name: "Amber Loom House",      owner: "Rajiv Amber",  phone: "+91 98xxx 1003", gstin: "29CDEFG3456H3Z7", verified: true,  insured: true,
-      area: "Jayanagar 4th Block", distanceKm: 3.1, minsAway: 18, rating: 4.9, deals: 310, established: 2011,
+      area: "Jayanagar 4th Block", lat: 12.9308, lng: 77.5832, distanceKm: 3.1, minsAway: 18, rating: 4.9, deals: 310, established: 2011,
       categories: ["sofa", "upholstery", "curtains"], offers: ["Designer consultation free"] },
     { id: "v4", name: "Neon & Linen",          owner: "Neha Lin",     phone: "+91 98xxx 1004", gstin: "29DEFGH4567I4Z8", verified: false, insured: false,
-      area: "HSR Layout", distanceKm: 0.8, minsAway: 6, rating: 4.5, deals: 88, established: 2021,
+      area: "HSR Layout", lat: 12.9118, lng: 77.6410, distanceKm: 0.8, minsAway: 6, rating: 4.5, deals: 88, established: 2021,
       categories: ["blinds", "curtains"], offers: ["Same-day blinds"] }
   ],
 
