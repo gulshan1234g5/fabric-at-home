@@ -1,4 +1,4 @@
-// FabricAtHome — route module test (OSRM mocked), run with node.
+// FabricAtHome — route module test (OSRM Table mocked), run with node.
 const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
@@ -10,30 +10,25 @@ global.localStorage = {
   setItem: (k, v) => { mem[k] = String(v); },
 };
 
-// Mock OSRM: same road result regardless of coords; developer controls failure.
+// Mock OSRM Table: distances[]/durations[] aligned to destination count.
 let hits = 0;
-let failNext = false;
-let failPrimary = false;      // force the primary host down → rotation kicks in
-let failAll = false;          // full outage → estimate fallback
+let failPrimary = false;   // first host (routing.openstreetmap.de) down
+let failAll = false;       // total outage -> estimates
 const hostsHit = [];
-const MOCK_DIST = 2447;     // meters
-const MOCK_DUR = 175.8;     // seconds
+const DIST_BY_DEST = { 1: 2447, 2: 5717, 3: 6328, 4: 4773 };
+const DUR_BY_DEST = { 1: 175.8, 2: 400.7, 3: 582.8, 4: 376.8 };
 global.fetch = (url) => {
   hits++;
-  const host = url.startsWith("https://routing.openstreetmap.de") ? "backup" : "primary";
-  hostsHit.push(host);
+  const isBackup = url.startsWith("https://router.project-osrm.org");
+  hostsHit.push(isBackup ? "backup" : "primary");
   return new Promise((resolve, reject) => {
     setTimeout(() => {
-      if (failNext) { failNext = false; reject(new Error("mock network fail")); return; }
-      if (failPrimary && host === "primary") { failPrimary = false; reject(new Error("primary 504")); return; }
       if (failAll) { reject(new Error("full outage")); return; }
-      resolve({
-        ok: true,
-        json: () => Promise.resolve({
-          code: "Ok",
-          routes: [{ distance: MOCK_DIST, duration: MOCK_DUR }]
-        })
-      });
+      if (failPrimary && !isBackup) { failPrimary = false; reject(new Error("primary 504")); return; }
+      const dests = (url.match(/destinations=([0-9;]+)/) || [null, "1"])[1].split(";");
+      const distances = [dests.map((d) => DIST_BY_DEST[d] || 1000 + +d)];
+      const durations = [dests.map((d) => DUR_BY_DEST[d] || 60 + +d)];
+      resolve({ ok: true, json: () => Promise.resolve({ code: "Ok", distances, durations }) });
     }, 10);
   });
 };
@@ -51,38 +46,44 @@ function ok(cond, label) {
   const A = { lat: 12.9345, lng: 77.6161 };   // Thar Interior Studio
   const B = { lat: 12.9352, lng: 77.6245 };   // default (Koramangala)
 
-  console.log("— exact OSRM route —");
-  const r1 = await R.route(A.lat, A.lng, B.lat, B.lng);
-  ok(r1.distanceM === MOCK_DIST, "exact road distance from OSRM");
-  ok(r1.durationS === MOCK_DUR, "exact duration from OSRM");
-  ok(r1.source === "osrm", "source labelled osrm");
-  ok(hits === 1, "one network hit for new pair");
+  console.log("— table(): ONE call for many vendors —");
+  const vendors = [
+    { lat: 12.9719, lng: 77.6412 },   // Indiranagar
+    { lat: 12.9308, lng: 77.5832 },   // Jayanagar
+    { lat: 12.9118, lng: 77.6410 }    // HSR
+  ];
+  const rows = await R.table(A, vendors);
+  const hitsAfterTable = hits;
+  ok(rows.length === 3, "one row per vendor, aligned");
+  ok(rows.every((r) => r.source === "osrm" && r.distanceM > 0 && r.durationS > 0), "all exact from table");
+  ok(hitsAfterTable === 1, "ONE network call for all vendors (rate-limit friendly)");
+  ok(rows[0].distanceM === DIST_BY_DEST[1], "matrix distance matched mock");
 
-  console.log("— cache / dedupe —");
+  console.log("— cache/dedupe across views —");
   const hitsBefore = hits;
-  const r2 = await R.route(A.lat, A.lng, B.lat, B.lng);
-  ok(r1 === r2 || (r2.distanceM === MOCK_DIST), "repeat resolves from cache");
-  ok(hits === hitsBefore, "no extra fetch on cached pair");
-  const p = R.peek(B.lat, B.lng, { lat: A.lat, lng: A.lng });
-  ok(p && p.source === "osrm", "peek() returns cached route");
+  const again = await R.table(A, vendors);
+  ok(hits === hitsBefore, "re-prime hits cache, no network");
+  ok(again.map((r) => r.source).every((s) => s === "osrm"), "cached rows stay exact");
+  ok(rows[0].distanceM === again[0].distanceM, "identical values from cache");
 
-  console.log("— host rotation (primary down → backup exact still works) —");
+  console.log("— per-pair route() uses the same path —");
+  const r1 = await R.route(A.lat, A.lng, B.lat, B.lng);
+  ok(r1.distanceM === DIST_BY_DEST[1] && r1.source === "osrm", "pair route resolved exact");
+
+  console.log("— host rotation (first host down → backup exact) —");
   failPrimary = true;
-  const D = { lat: 12.9118, lng: 77.6410 };   // HSR Layout
-  const r4 = await R.route(D.lat, D.lng, B.lat, B.lng);
-  ok(r4.source === "osrm", "backup host returned exact OSRM route after primary 504");
-  ok(r4.distanceM === MOCK_DIST, "backup distance identical");
+  const r4 = await R.route(B.lat, B.lng, A.lat, A.lng);
+  ok(r4.source === "osrm" && r4.distanceM === DIST_BY_DEST[1], "backup host returned exact after primary 504");
   ok(hostsHit.filter((h) => h === "primary").length >= 1 && hostsHit.filter((h) => h === "backup").length >= 1,
-    "both hosts were attempted in rotation");
+    "both hosts attempted in rotation");
 
-  console.log("— honest fallback on failure (both hosts down) —");
+  console.log("— honest fallback (full outage → estimates) —");
   failAll = true;
-  const C = { lat: 12.9719, lng: 77.6412 };   // Indiranagar
-  const r3 = await R.route(C.lat, C.lng, B.lat, B.lng);
+  const FRESH = { lat: 12.9410, lng: 77.6010 };  // never-used pair → no cache
+  const r3 = await R.route(FRESH.lat, FRESH.lng, B.lat, B.lng);
   failAll = false;
-  ok(r3.source === "estimate", "estimated source when OSRM fails");
+  ok(r3.source === "estimate", "estimated source when every OSRM host fails");
   ok(r3.distanceM > 0 && r3.durationS > 0, "estimate has sane numbers");
-  ok(hits >= 2, "both hosts attempted");
 
   console.log("— formatting (ride-app style) —");
   ok(R.fmtDistance(2447) === "2.4 km", "km rounded to 1 decimal");
@@ -90,10 +91,10 @@ function ok(cond, label) {
   ok(R.fmtEta(175.8) === "~3 min", "ETA ceil to minutes");
   ok(R.fmtEta(61) === "~2 min", "1m01s → ~2 min (ceiling)");
 
-  console.log("— persistence to localStorage —");
-  const persisted = Object.keys(JSON.parse(mem["fah.route.v1"] || "{}")).length;
-  ok(persisted > 0, "route cache persisted (" + persisted + " routes)");
-  ok(R.status().cached >= 2, "status reports cached count");
+  console.log("— persistence —");
+  const persisted = Object.keys(JSON.parse(mem["fah.route.v2"] || "{}")).length;
+  ok(persisted > 0, "route cache persisted to localStorage");
+  ok(R.status().osrm > 0, "status counts exact osrm rows");
 
   console.log("\n%d passed, %d failed", pass, fail);
   process.exit(fail ? 1 : 0);

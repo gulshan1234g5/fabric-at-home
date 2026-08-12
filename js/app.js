@@ -117,49 +117,62 @@
 function distRow(v) {
     const mEl = el("span", { id: "dist-m-" + v.id }, [""]);
     const eEl = el("span", { class: "muted small", id: "dist-e-" + v.id }, [""]);
-    // Instant road-estimate placeholder, then OSRM exact distance fills in place.
+    // Instant road-estimate placeholder, then OSRM exact fills in place.
     const estM = Math.round(geoDistance(v) * 1000);
     const estMin = geoMins(v);
     mEl.textContent = fmtMeters(estM);
     eEl.textContent = "· ~" + estMin + " min away";
-    scheduleRoute(v, mEl, eEl);
     return div({ class: "dist" }, [el("span", { class: "dot" }), mEl, eEl]);
   }
   function fmtMeters(m) {
     return m < 1000 ? Math.round(m) + " m" : (m / 1000).toFixed(1) + " km";
   }
-  // Showroom hero "arrival in ~X min" filled with the exact OSRM ETA.
+
+  // Ride-app routing: ONE OSRM matrix call (origin → all shown showrooms) fills
+  // every card + hero in place. No per-card request spam → no rate-limit stall.
+  let routePrime = null;
+  function originPoint() {
+    if (typeof window.FAHGeo !== "undefined" && typeof window.FAHGeo.origin === "function") {
+      return window.FAHGeo.origin();
+    }
+    return null;
+  }
+  function fillRoute(vid, r) {
+    if (!r || !r.distanceM) return;
+    const m = document.getElementById("dist-m-" + vid);
+    const e = document.getElementById("dist-e-" + vid);
+    if (m) m.textContent = window.FAHRoute.fmtDistance(r.distanceM);
+    if (e) e.textContent = "· " + window.FAHRoute.fmtEta(r.durationS) + " away";
+    const sh = document.getElementById("sh-eta-" + vid);
+    if (sh) sh.textContent = "Rep available now — arrival in " + window.FAHRoute.fmtEta(r.durationS) + " from slot";
+  }
+  function primeRoutes(vendors) {
+    if (!window.FAHRoute || routePrime) return;
+    const o = originPoint();
+    const valid = (vendors || []).filter((v) => typeof v.lat === "number");
+    if (!o || typeof o.lat !== "number" || !valid.length) return;
+    routePrime = window.FAHRoute.table(o, valid.map((v) => ({ lat: v.lat, lng: v.lng })))
+      .then((rows) => {
+        if (!rows) return;
+        valid.forEach((v, i) => { const r = rows[i]; if (r) fillRoute(v.id, r); });
+      })
+      .catch(() => {})
+      .then(() => { routePrime = null; });
+  }
+  // Showroom hero "arrival in ~X min" — exact ETA (cache or one-call prime).
   function setupShowroomEta(v) {
     if (!window.FAHRoute || typeof v.lat !== "number" || typeof v.lng !== "number") return;
-    const o = window.FAHGeo ? window.FAHGeo.origin() : null;
-    if (!o || typeof o.lat !== "number" || typeof o.lng !== "number") return;
-    const fill = (r) => {
-      if (!r) return;
-      const sh = document.getElementById("sh-eta-" + v.id);
-      if (sh) sh.textContent = "Rep available now — arrival in " + window.FAHRoute.fmtEta(r.durationS) + " from slot";
-    };
-    const cached = window.FAHRoute.peek(v.lat, v.lng, o);
-    if (cached) { fill(cached); return; }
-    window.FAHRoute.route(o.lat, o.lng, v.lat, v.lng).then(fill).catch(() => {});
+    primeRoutes([v]);
   }
-  // Ask OSRM for the exact road route; update the card in place (no re-render,
-  // no scroll jump). Reads cache first so later re-renders are instant.
-  function scheduleRoute(v, mEl, eEl) {
-    if (!window.FAHRoute || typeof v.lat !== "number" || typeof v.lng !== "number") return;
-    const o = window.FAHGeo ? window.FAHGeo.origin() : null;
-    if (!o || typeof o.lat !== "number" || typeof o.lng !== "number") return;
-    const fill = (r) => {
-      if (!r) return;
-      const m = document.getElementById("dist-m-" + v.id);
-      const e = document.getElementById("dist-e-" + v.id);
-      if (m) m.textContent = window.FAHRoute.fmtDistance(r.distanceM);
-      if (e) e.textContent = "· " + window.FAHRoute.fmtEta(r.durationS) + " away";
-      const sh = document.getElementById("sh-eta-" + v.id);
-      if (sh) sh.textContent = window.FAHRoute.fmtEta(r.durationS) + " from slot";
-    };
-    const cached = window.FAHRoute.peek(v.lat, v.lng, o);
-    if (cached) { fill(cached); return; }
-    window.FAHRoute.route(o.lat, o.lng, v.lat, v.lng).then(fill).catch(() => {});
+  // Honesty: when GPS isn't live, distances are from the fallback area — say so.
+  function locNote() {
+    if (typeof window.FAHGeo === "undefined" || typeof window.FAHGeo.live !== "function") return null;
+    if (window.FAHGeo.live()) return null;
+    const label = window.FAHGeo.placeLabel();
+    return div({ class: "loc-note" }, [
+      el("span", {}, ["Distances from " + label + ". "]),
+      el("a", { href: "#", class: "link", dataset: { reloc: "1" } }, ["Set location"])
+    ]);
   }
   // wrap geo so tests without FAHGeo stay safe
   function geoDistance(v) {
@@ -247,7 +260,9 @@ function distRow(v) {
       } else {
         const list = div({ class: "list" });
         sortable.forEach((v) => list.appendChild(showroomCard(v)));
-        body.push(section("Nearby showrooms", list));
+        const note = locNote();
+        body.push(section("Nearby showrooms", note ? div({ class: "stack" }, [note, list]) : list));
+        primeRoutes(sortable);
       }
     }
 
@@ -452,6 +467,7 @@ function geoLocating() {
         ]));
       });
     const title = cats.find((c) => c.id === id)?.name || "Category";
+    primeRoutes(S.getState().showrooms.filter((v) => v.categories.includes(id)));
     return div({ class: "stack" }, [
       section(title, list),
       div({ class: "chips sticky", dataset: { chips: "1" } }, cats.map((c) => catChip(c.id, c.id === id)))

@@ -19,10 +19,10 @@
 //   * Everything else (external OSRM/reverse-geocode) -> never cached (privacy).
 //   * Skip-waiting on a SKIP_WAITING message so an update applies cleanly.
 
-const SHELL = "fah-shell-v8";
-const RUNTIME = "fah-runtime-v8";
-const PAGES = "fah-pages-v8";
-const PAGES_COOKIE = "fah-v8";
+const SHELL = "fah-shell-v9";
+const RUNTIME = "fah-runtime-v9";
+const PAGES = "fah-pages-v9";
+const PAGES_COOKIE = "fah-v9";
 
 const ASSETS = [
   "./",
