@@ -15,7 +15,7 @@ function fetch(url) {
 
 (async () => {
   const BASE = 'https://gulshan1234g5.github.io/fabric-at-home';
-  const files = ['js/data.js', 'js/provider.js', 'js/store.js', 'js/geo.js', 'js/app.js'];
+  const files = ['js/data.js', 'js/search.js', 'js/db.js', 'js/provider.js', 'js/store.js', 'js/geo.js', 'js/app.js'];
   const srcs = {};
   for (const f of files) srcs[f] = await fetch(BASE + '/' + f);
 
@@ -47,7 +47,7 @@ function fetch(url) {
     console, Date, Math, String, Number, Object, Array, JSON, parseInt, parseFloat, RegExp, setTimeout, clearTimeout, confirm: () => true
   };
   vm.createContext(sandbox);
-  for (const f of ['js/data.js', 'js/provider.js', 'js/store.js', 'js/geo.js']) {
+  for (const f of ['js/data.js', 'js/search.js', 'js/db.js', 'js/provider.js', 'js/store.js', 'js/geo.js']) {
     try { vm.runInContext(srcs[f], sandbox); } catch (e) { console.log('LOAD ERROR', f, e.message); }
   }
   try { vm.runInContext(srcs['js/app.js'], sandbox); } catch (e) { console.log('RUNTIME ERROR in app.js:', e.message); process.exit(1); }
