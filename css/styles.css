@@ -416,3 +416,85 @@ body {
   .tabbar { justify-content: center; }
   .tab { max-width: 150px; }
 }
+/* ---- Role strip ---- */
+.role-strip { display: flex; flex-direction: column; gap: 8px; }
+.role-line {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius-sm); padding: 10px 12px; font-size: 13px;
+}
+.role-line .btn { margin-left: auto; }
+
+/* ---- Badges ---- */
+.badge-unverified {
+  font-size: 10px; font-weight: 700; color: var(--muted);
+  border: 1px solid var(--line); background: var(--surface-2);
+  padding: 1px 6px; border-radius: 4px; margin-left: 4px;
+  letter-spacing: 0.02em;
+}
+.badge-insured {
+  font-size: 10px; font-weight: 700; color: #8E6A33;
+  border: 1px solid #E0D3B8; background: #F7F1E3;
+  padding: 1px 6px; border-radius: 4px; margin-left: 4px;
+  letter-spacing: 0.02em;
+}
+
+/* ---- Reviews ---- */
+.review-teaser {
+  display: flex; align-items: center; gap: 8px;
+  margin: 8px 0; padding: 8px 10px;
+  background: var(--surface-2); border-radius: var(--radius-sm);
+}
+.stars { display: inline-flex; gap: 1px; font-size: 14px; letter-spacing: 0; }
+.star { color: var(--line); }
+.star.on { color: #B98A2E; }
+.review-card { display: flex; flex-direction: column; gap: 6px; }
+.review-head { display: flex; justify-content: space-between; align-items: baseline; }
+.review-dims { display: flex; flex-wrap: wrap; gap: 6px; }
+.dim-item {
+  font-size: 11px; color: var(--ink-2); background: var(--surface-2);
+  border-radius: 5px; padding: 2px 7px; text-transform: capitalize;
+}
+
+/* ---- Deal review grading ---- */
+.grade { display: flex; gap: 8px; }
+.grade-btn {
+  font: inherit; font-size: 14px; font-weight: 700; color: var(--ink-2);
+  border: 1px solid var(--line); background: var(--surface);
+  border-radius: 8px; padding: 8px 0; flex: 1; cursor: pointer;
+}
+.grade-btn.is-active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); }
+.grade.big .grade-btn { font-size: 20px; color: var(--line); }
+.grade.big .grade-btn.is-active { color: #B98A2E; border-color: #D9B76A; background: #FAF4E3; }
+.dim-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.dim-row .grade { flex: 1; }
+.review-dims-input { display: flex; flex-direction: column; gap: 12px; }
+.input.area { min-height: 84px; resize: vertical; font-family: inherit; }
+
+/* ---- Completed / pay flow ---- */
+.completed-box {
+  display: flex; flex-direction: column; gap: 4px; align-items: center;
+  background: #F1F4E8; border: 1px solid #CBD4B2; border-radius: var(--radius);
+  padding: 14px; text-align: center; font-weight: 600; color: var(--ok);
+}
+.ok-icon { font-size: 20px; }
+.centered { text-align: center; }
+
+/* ---- Vendor orders / settlements ---- */
+.earn-line b { color: var(--surface); }
+.earn-break .muted { color: rgba(255,255,255,0.7); }
+.settle-line {
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  padding: 8px 0; font-size: 13px; border-bottom: 1px dashed var(--line);
+}
+.settle-line:last-child { border-bottom: none; }
+.settle-row { display: flex; flex-direction: column; gap: 6px; }
+.settle-row .btn { margin-top: 4px; }
+.settle-line .cap, .settle-line b { text-transform: capitalize; }
+
+/* ---- Account / roles ---- */
+.role-card.is-active { border-color: var(--accent); background: #FBF7F3; }
+.role-card .btn { margin-top: 8px; }
+.legal-line { padding: 8px 0; border-bottom: 1px dashed var(--line); }
+.legal-line:last-child { border-bottom: none; }
+.legal-line p { margin-top: 3px; line-height: 1.55; }

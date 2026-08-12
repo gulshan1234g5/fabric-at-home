@@ -1,0 +1,17 @@
+{
+  "name": "FabricAtHome — fabric at your home",
+  "short_name": "FabricAtHome",
+  "description": "Local marketplace: choose fabric at home, a verified showroom rep arrives in ~30 min.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F6F4EF",
+  "theme_color": "#C1583B",
+  "lang": "en-IN",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

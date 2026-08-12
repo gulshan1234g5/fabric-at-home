@@ -1,7 +1,7 @@
 test_dom.js
 test_store.js
 test_browser.js
-test_store.js
+make_icons.py
 send_telegram.py
 *.pyc
 __pycache__/

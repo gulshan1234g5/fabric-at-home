@@ -1,54 +1,80 @@
 # FabricAtHome
 
-Local marketplace where nearby fabric showrooms list and customers book an at-home visit. A verified showroom rep arrives **within ~30 minutes** carrying the curtain & sofa-fabric catalogs, so buyers choose fabric at home.
+Local marketplace for fabric showrooms. Buyers pick a category, browse a
+showroom's catalog, book an **at-home visit** — a verified rep arrives
+**within ~30 minutes** carrying the full curtain & sofa-fabric catalog. The
+platform takes **3% commission** only on completed deals.
 
-**V1 = seeded mock data only.** Real dispatch, vendor accounts, gig-worker payments, and payments come later. Everything runs offline in the browser via `localStorage`.
+**Live now:** https://gulshan1234g5.github.io/fabric-at-home/
 
-## Run it
+## Run locally
 
 ```sh
 cd /root/fabric-at-home
-python3 -m http.server 8080        # any static server works
-# open http://<host>:8080
+python3 -m http.server 8080   # open http://localhost:8080
 ```
 
-No build step, no dependencies.
+Installable PWA: open the URL → browser menu → "Add to Home screen". Works
+offline after first load (service worker caches all assets).
 
-## Flow (research-informed)
+## What's in this build (research-informed, production-shaped)
 
-1. **Home (location-first discovery)** — fabric categories (curtains / sofa fabric / blinds / upholstery) + nearby showrooms sorted by distance, with rating·deals·Verified on every card.
-2. **Category → catalog preview** — showrooms carrying that category with swatch previews + ₹/m prices.
-3. **Showroom detail** — trust first (rating, deals, since, your deals), full fabric catalog with per-meter prices, then **Book a visit**.
-4. **Booking (3 steps: address → slot → confirm)** — the ~30-min promise is stated at every step; 4–6 real 30-min slots from now.
-5. **Live status** — assigned → on-the-way → arrived (3-step timeline). A `Simulate` button walks dispatch for the V1 mock.
-6. **Deal at door** — pick fabrics + metres, line total, platform **3% commission** auto-computed, visit completes.
-7. **Orders** — commission ledger (total earned, deal count, avg deal/commission) + full order history. One-tap **Rebook** for repeat showrooms.
+| Layer | What it does |
+|---|---|
+| **Buyer flow** | Location-first discovery, 4 categories, trust cards (rating·deals·Verified), 3-step booking (address → 30-min slot → confirm), live status (assigned → on-the-way → arrived), deal recording + UPI, post-visit review |
+| **Vendor apps** | Earnings dashboard (gross / 3% commission / net), orders, T+1 settlements, reviews received, public showroom page |
+| **Admin ops** | Platform commission ledger, GMV & escrow, pending payouts (mark paid), vendor KYC/verification queue |
+| **Trust engine** | Rating + count on every card, Verified/Insured badges, 3-dimension reviews (punctuality/quality/communication), review teasers |
+| **Payments** | UPI at completion; 3% commission split; T+1 settlement records; Razorpay Route scaffolding in `backend/` |
+| **Legal** | DPDP-lean privacy policy + terms of use (in-app) |
 
-## Trust model (per industry research)
+## Roles (demo accounts)
 
-- Rating **and** count visible on the listing card (never score without count).
-- Verified badge on every card, not buried in the profile.
-- Real names + transport for dispatched crew.
-- Price visible before booking; no signup wall; ≤3-step booking.
-- Commission **3% only on completed deals** — shown before booking and again at the deal screen.
+Account → role switcher (`Account` tab):
 
-## Files
+- **Buyer** — full discovery → booking → live → deal → review journey
+- **Vendor** (`Manish Thar`, Thar Interior Studio) — earnings, orders, settlements
+- **Admin** — platform ledger, payouts, vendor verification
+
+## Architecture
 
 ```
-index.html          app shell (app bar, view, tab bar, toast)
-css/styles.css      design system (warm-neutral mono + terracotta accent)
-js/data.js          FAH — seeded categories/showrooms/catalog/price mods
-js/store.js         FAHStore — localStorage state, visit flow, 3% commission
-js/app.js           FAHApp — SPA views + wiring (window.__FAH_APP__ test hook)
-test_store.js       logic tests   (node test_store.js   → 23 pass)
-test_dom.js         render tests  (node test_dom.js     → 24 pass)
-test_browser.js     Playwright E2E (needs a browser binary)
+js/data.js        FAH — seeded catalog, vendors, roles, crews, 3% rate
+js/provider.js    storage adapter + auth/session (local mock now)
+js/store.js       domain logic: visits, orders, commission split, settlements, reviews
+js/app.js         SPA views + role wiring
+backend/          Supabase schema + RLS, Edge Functions, Razorpay Route, go-live README
+```
+
+**Taking it live:** the DB schema in `backend/schema.sql` mirrors the JS
+contract exactly. Create a Supabase project, run the SQL, deploy the edge
+functions, add your Razorpay keys, then flip `window.FH_BACKEND.enabled` in
+`index.html`. No UI rewrite needed — RLS enforces buyer/vendor/admin isolation
+on the server. See `backend/README.md`.
+
+## Tests
+
+```sh
+node test_store.js    # 29 logic tests: booking, 3% split, settlements, reviews
+node test_dom.js      # 31 render tests: every view, every role, full journey
 ```
 
 ## Design
 
-Monochrome warm-neutral palette (`--ink #2B2620`, `--bg #F6F4EF`), single terracotta accent (`--accent #C1583B`), dense calm cards, zero ornament, mobile-first (max 520px).
+Warm-neutral monochrome (`--ink #2B2620` / `--bg #F6F4EF`), single terracotta
+accent (`--accent #C1583B`), dense calm cards, zero ornament, mobile-first.
 
 ## Commission
 
-`COMMISSION_RATE = 0.03` in `js/data.js`. Logic in `store.js` (`createOrder`): line total × 3%, rounded, stored per order, aggregated in the Orders ledger.
+`FAH.COMMISSION_RATE = 0.03` in `js/data.js`. On every completed deal the store
+writes `lineTotal`, `commission` (3%), `vendorShare` (97%), a UPI payment
+record, and a T+1 settlement. Aggregates power the buyer/vendor/admin ledgers.
+
+## Compliance runway (before real money)
+
+1. Vendor KYC + verification queue (admin screen exists) — required by
+   Zerodha-style trust norms and marketplace practice.
+2. Payments via Razorpay (RBI PA) using **Route** linked accounts — commission
+   + T+1 payouts, GST-invoice both ways, TCS on commission → GSTR-8.
+3. DPDP: consent, data deletion, retention policy.
+4. Real dispatch (crew + geofencing) or honest ~30-min degradation.
