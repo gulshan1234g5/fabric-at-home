@@ -21,20 +21,24 @@ offline after first load (service worker caches all assets).
 
 | Layer | What it does |
 |---|---|
-| **Buyer flow** | Location-first discovery, 4 categories, trust cards (rating·deals·Verified), 3-step booking (address → 30-min slot → confirm), live status (assigned → on-the-way → arrived), deal recording + UPI, post-visit review |
-| **Vendor apps** | Earnings dashboard (gross / 3% commission / net), orders, T+1 settlements, reviews received, public showroom page |
-| **Admin ops** | Platform commission ledger, GMV & escrow, pending payouts (mark paid), vendor KYC/verification queue |
+| **Customer flow** | Location-first discovery (real GPS), 4 categories, trust cards (rating·deals·Verified), 3-step booking (address → 30-min slot → confirm), live status (assigned → on-the-way → arrived), deal recording + UPI, post-visit review |
 | **Trust engine** | Rating + count on every card, Verified/Insured badges, 3-dimension reviews (punctuality/quality/communication), review teasers |
-| **Payments** | UPI at completion; 3% commission split; T+1 settlement records; Razorpay Route scaffolding in `backend/` |
-| **Legal** | DPDP-lean privacy policy + terms of use (in-app) |
+| **Payments** | UPI at completion; vendor pays 3% commission (never hidden in your price); T+1 settlement records; Razorpay Route scaffolding in `backend/` |
+| **Legal** | DPDP-lean privacy policy + terms of use (Discover → About) |
+
+> **Customer-only build.** This is the buyer-facing app: discover → book →
+> track → deal → review. No signup to browse; bookings work as a guest until
+> the Supabase backend adds phone auth. (Vendor/admin surfaces were removed;
+> they live in the earlier commits for ops later.)
 
 ## Roles (demo accounts)
 
-Account → role switcher (`Account` tab):
+Customer-only. No accounts on the customer side — browse and book as a guest.
+Vendor/admin ops are covered by the Supabase backend schema in `backend/`.
 
-- **Buyer** — full discovery → booking → live → deal → review journey
-- **Vendor** (`Manish Thar`, Thar Interior Studio) — earnings, orders, settlements
-- **Admin** — platform ledger, payouts, vendor verification
+> History: V2 had in-app buyer/vendor/admin demo switcher; removed in the
+> customer-only build per product direction. Ops surfaces remain in git
+> history and in the backend schema for later use.
 
 ## Architecture
 
@@ -69,7 +73,7 @@ on the server. See `backend/README.md`.
 
 ```sh
 node test_store.js    # 29 logic tests: booking, 3% split, settlements, reviews
-node test_dom.js      # 34 render tests: every view, every role, full journey
+node test_dom.js      # 31 render tests: customer journey, every view, GPS
 node test_geo.js      # 10 GPS tests: haversine, distance, ETA, states, overrides
 ```
 

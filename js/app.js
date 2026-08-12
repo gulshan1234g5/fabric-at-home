@@ -6,7 +6,6 @@
   "use strict";
 
   const S = window.FAHStore;
-  const P = window.FAHProvider;
   const data = window.FAH;
 
   // ---- Router --------------------------------------------------------------
@@ -115,8 +114,6 @@
 
   function viewHome() {
     const st = S.getState();
-    const isVendor = P.isRole("vendor");
-    const isAdmin = P.isRole("admin");
     const geoList = geoSorted();
     const sortable = geoList || [...st.showrooms].sort((a, b) => a.distanceKm - b.distanceKm);
     const activeVisits = st.visits.filter((v) => v.status !== "completed");
@@ -152,32 +149,7 @@
       ]));
     });
 
-    // Role-aware header strip
-    const roleStrip = div({ class: "role-strip" });
-    if (isVendor) {
-      roleStrip.appendChild(div({ class: "role-line", dataset: { nav: "vendor-dash" } }, [
-        el("span", {}, ["You're signed in as a "]),
-        el("b", {}, ["vendor"]),
-        btn("Open my dashboard", { class: "btn tiny terracotta", dataset: { nav: "vendor-dash" } })
-      ]));
-    } else if (isAdmin) {
-      roleStrip.appendChild(div({ class: "role-line", dataset: { nav: "admin" } }, [
-        el("span", {}, ["Admin ops mode"]),
-        btn("Open operations desk", { class: "btn tiny terracotta", dataset: { nav: "admin" } })
-      ]));
-    } else if (P.currentUser()) {
-      roleStrip.appendChild(div({ class: "role-line" }, [
-        el("span", { class: "muted" }, ["Signed in as " + P.currentUser().name]),
-        btn("Switch role", { class: "btn tiny ghost", dataset: { nav: "account" } })
-      ]));
-    } else {
-      roleStrip.appendChild(div({ class: "role-line" }, [
-        el("span", { class: "muted" }, ["Booking as guest"]),
-        btn("Sign in", { class: "btn tiny ghost", dataset: { nav: "account" } })
-      ]));
-    }
-
-    const body = [heroSection(), roleStrip];
+    const body = [heroSection(), customerStrip()];
     if (activeVisits.length) {
       const live = div({ class: "live-strip" });
       activeVisits.forEach((v) => {
@@ -249,6 +221,21 @@
   function placeLabel() {
     if (typeof window.FAHGeo === "undefined") return "Koramangala, Bengaluru";
     return window.FAHGeo.placeLabel() + (window.FAHGeo.status() === "denied" ? " (default)" : "");
+  }
+
+  // Customer reassurance strip — replaces the role switcher now that the app
+  // is customer-only. Trust + promise, no credentials needed.
+  function customerStrip() {
+    return div({ class: "role-strip" }, [
+      div({ class: "role-line" }, [
+        el("span", { class: "trust-mark" }, ["✓"]),
+        el("span", {}, ["Free visit · verified showrooms only · 3% platform fee only on completed deals"]),
+        div({ class: "strip-caption" }, [
+          el("span", { class: "muted small" }, ["No signup to browse — book in 3 steps."]),
+          btn("How it works", { class: "btn tiny ghost", dataset: { nav: "legal", id: "terms" } })
+        ])
+      ])
+    ]);
   }
 
   // ---- View: CATEGORY --------------------------------------------------------
@@ -590,173 +577,8 @@
     return wrap;
   }
 
-  // ---- View: VENDOR DASHBOARD -----------------------------------------------------
-
-  function viewVendor() {
-    const user = P.currentUser();
-    const v = S.vendorById(user ? user.vendorId : "v1");
-    if (!v) return emptyState("No vendor account linked.");
-    const st = S.getState();
-    const earn = S.vendorEarnings(v.id);
-    const orders = S.ordersFor(v.id);
-    const settlements = S.settlementsFor(v.id);
-    const reviews = S.reviewsFor(v.id);
-
-    const summary = div({ class: "earn-card" }, [
-      div({ class: "earn-main" }, [
-        el("span", { class: "cap" }, ["Vendor · " + v.name]),
-        el("h2", {}, [S.fmtINR(earn.net)]),
-        el("span", { class: "small" }, ["net earnings after " + (FAH.COMMISSION_RATE * 100) + "% commission"])
-      ]),
-      div({ class: "earn-break" }, [
-        line("Gross sales", S.fmtINR(earn.gross)),
-        line("Platform commission", "− " + S.fmtINR(earn.commission)),
-        line("Orders", String(earn.orders)),
-        line("Avg rating", String(v.rating) + " ★")
-      ])
-    ]);
-
-    const settleBox = div({ class: "card form" },
-      settlements.length ? settlements.map((sl) => div({ class: "settle-line" }, [
-        el("span", {}, [sl.reference || "Order settlement"]),
-        el("span", { class: "muted small" }, [sl.status]),
-        el("b", {}, [S.fmtINR(sl.vendorShare)])
-      ])) : [div({ class: "muted small" }, ["No settlements yet. Complete deals to receive payouts (T+1)."])]);
-
-    const orderList = div({ class: "list" },
-      orders.length ? orders.map((o) => div({ class: "card order-card" }, [
-        div({ class: "order-head" }, [
-          el("b", {}, [S.fmtDateOnly(o.createdAt)]),
-          el("span", { class: "com-pos" }, ["+" + S.fmtINR(o.vendorShare)])
-        ]),
-        el("div", { class: "muted small" }, [o.itemIds.map((i) => S.itemName(i)).join(", ")]),
-        div({ class: "order-amounts" }, [
-          el("span", {}, ["Deal " + S.fmtINR(o.lineTotal)]),
-          el("span", { class: "com-pos" }, ["Vendor " + S.fmtINR(o.vendorShare)])
-        ])
-      ])) : [div({ class: "muted small" }, ["No orders yet."])]);
-
-    const reviewBox = div({ class: "list" },
-      reviews.length ? reviews.slice(0, 3).map((r) => div({ class: "card review-card" }, [
-        stars(r.rating), el("span", { class: "muted small" }, [r.reviewer]), el("p", { class: "muted small" }, [r.comment])
-      ])) : [div({ class: "muted small" }, ["No reviews yet."])]);
-
-    return div({ class: "stack" }, [
-      summary,
-      section("Settlements", settleBox),
-      section("Recent orders", orderList),
-      section("Latest reviews", reviewBox),
-      div({ class: "rebook" }, [
-        el("span", {}, ["View your public showroom page"]),
-        btn("Open " + v.name, { class: "btn sm terracotta", dataset: { nav: "showroom", id: v.id } })
-      ])
-    ]);
-  }
-
   function line(l, val) {
     return div({ class: "earn-line" }, [el("span", {}, [l]), el("b", {}, [val])]);
-  }
-
-  // ---- View: ADMIN OPS -------------------------------------------------------------
-
-  function viewAdmin() {
-    const st = S.getState();
-    const stats = S.settleStats();
-    const rev = S.totalCommission();
-    const escrow = st.settlements.filter((x) => x.status === "scheduled")
-      .reduce((t, s) => t + s.vendorShare, 0);
-
-    const platform = div({ class: "earn-card" }, [
-      div({ class: "earn-main" }, [
-        el("span", { class: "cap" }, ["Platform · Ops desk"]),
-        el("h2", {}, [S.fmtINR(rev)]),
-        el("span", { class: "small" }, ["lifetime commission earned (3%)"])
-      ]),
-      div({ class: "earn-break" }, [
-        line("GMV", S.fmtINR(stats.ordersValue)),
-        line("Orders", String(stats.pendingOrders)),
-        line("Vendors", String(st.showrooms.length)),
-        line("Escrow (scheduled T+1)", S.fmtINR(escrow))
-      ])
-    ]);
-
-    const pending = div({ class: "list" },
-      st.settlements.filter((x) => x.status === "scheduled").map((sl) => {
-        const vd = S.vendorById(sl.showroomId);
-        return div({ class: "card settle-row", dataset: { markPaid: sl.id } }, [
-          div({ class: "order-head" }, [
-            el("b", {}, [vd ? vd.name : ""]),
-            el("b", {}, [S.fmtINR(sl.vendorShare)])
-          ]),
-          el("span", { class: "muted small" }, ["Settle by " + S.fmtDateOnly(sl.settleBy)]),
-          btn("Mark paid (simulate payout)", { class: "btn ghost sm", dataset: { markPaid: sl.id } })
-        ]);
-      }));
-
-    const unpaid = div({ class: "card form" },
-      st.settlements.filter((x) => x.status !== "scheduled").length
-        ? st.settlements.filter((x) => x.status !== "scheduled").map((sl) => div({ class: "settle-line" }, [
-            el("span", { class: "muted" }, [sl.status]),
-            el("b", {}, [S.fmtINR(sl.vendorShare)])
-          ]))
-        : [div({ class: "muted small" }, ["No paid payouts yet."])]);
-
-    // vendor verification (KYC) queue
-    const kyc = div({ class: "list" },
-      st.showrooms.filter((x) => !x.verified).map((x) => div({ class: "card", dataset: { verify: x.id } }, [
-        div({ class: "order-head" }, [el("b", {}, [x.name]), el("span", { class: "badge-unverified" }, ["unverified"])]),
-        el("span", { class: "muted small" }, ["GSTIN " + (x.gstin || "not filed") + " · insured: " + (x.insured ? "yes" : "no")]),
-        btn("Approve verification", { class: "btn ghost sm", dataset: { verify: x.id } })
-      ])));
-
-    return div({ class: "stack" }, [
-      platform,
-      section("Pending payouts (T+1 escrow)", pending),
-      section("Paid payouts", unpaid),
-      section("Vendor verification queue (KYC)", kyc)
-    ]);
-  }
-
-  // ---- View: ACCOUNT / ROLES ---------------------------------------------------------
-
-  function viewAccount() {
-    const user = P.currentUser();
-    const roles = ["buyer", "vendor", "admin"];
-    const rolePick = div({ class: "list" });
-    roles.forEach((role) => {
-      const acc = data.accounts[role];
-      const active = user && user.role === role;
-      rolePick.appendChild(div({ class: "card role-card" + (active ? " is-active" : ""), dataset: { login: role } }, [
-        div({ class: "order-head" }, [el("b", {}, [acc.name]), el("span", { class: "muted cap small" }, [role])]),
-        el("span", { class: "muted small" }, [roleLabel(role)]),
-        active ? el("span", { class: "badge-verified" }, ["current"]) : btn("Use this account", { class: "btn tiny ghost", dataset: { login: role } })
-      ]));
-    });
-
-    return div({ class: "stack" }, [
-      div({ class: "book-intro" }, [
-        el("span", { class: "step-num" }, ["Accounts"]),
-        el("h2", {}, ["Who's using FabricAtHome?"]),
-        el("p", { class: "muted" }, ["V1 demo accounts. Real phone/Google auth arrives with the Supabase backend — same screens, real sessions."])
-      ]),
-      section("Role", rolePick),
-      section("Legal", div({ class: "list" }, [
-        div({ class: "card", dataset: { nav: "legal", id: "privacy" } }, [
-          el("b", {}, ["Privacy policy"]),
-          el("span", { class: "muted small" }, ["DPDP-aligned — what we collect, why."]),
-          btn("Read", { class: "btn tiny ghost", dataset: { nav: "legal", id: "privacy" } })
-        ]),
-        div({ class: "card", dataset: { nav: "legal", id: "terms" } }, [
-          el("b", {}, ["Terms of use"]),
-          el("span", { class: "muted small" }, ["Commission, cancellations, escrow."]),
-          btn("Read", { class: "btn tiny ghost", dataset: { nav: "legal", id: "terms" } })
-        ])
-      ]))
-    ]);
-  }
-
-  function roleLabel(r) {
-    return { buyer: "Books fabric visits at home.", vendor: "Runs a showroom, tracks earnings & settlements.", admin: "Ops: payouts, KYC, platform commission." }[r] || "";
   }
 
   // ---- View: LEGAL -------------------------------------------------------------------
@@ -796,20 +618,19 @@
 
   function viewOrders() {
     const st = S.getState();
-    const totalCom = S.totalCommission();
     const orders = st.orders;
     const openVisits = st.visits.filter((v) => v.status !== "completed");
 
     const stats = div({ class: "earn-card" }, [
       div({ class: "earn-main" }, [
-        el("span", { class: "cap" }, ["Platform commission earned"]),
-        el("h2", {}, [S.fmtINR(totalCom)]),
-        el("span", { class: "small" }, [orders.length + " completed deals · " + (FAH.COMMISSION_RATE * 100) + "% per deal"])
+        el("span", { class: "cap" }, ["Your fabric visits"]),
+        el("h2", {}, [String(orders.length)]),
+        el("span", { class: "small" }, ["completed deals · you pay the showroom directly; our " + (FAH.COMMISSION_RATE * 100) + "% fee comes from the showroom, never hidden in your price"])
       ]),
       div({ class: "earn-break" }, [
-        line("Deals", String(orders.length)),
-        line("Avg deal value", orders.length ? S.fmtINR(Math.round(orders.reduce((t, o) => t + o.lineTotal, 0) / orders.length)) : "₹0"),
-        line("Avg commission", orders.length ? S.fmtINR(Math.round(totalCom / orders.length)) : "₹0")
+        line("Completed visits", String(orders.length)),
+        line("Total spent", orders.length ? S.fmtINR(orders.reduce((t, o) => t + o.lineTotal, 0)) : "₹0"),
+        line("Avg deal", orders.length ? S.fmtINR(Math.round(orders.reduce((t, o) => t + o.lineTotal, 0) / orders.length)) : "₹0")
       ])
     ]);
 
@@ -862,7 +683,7 @@
     const isHome = route.name === "home";
 
     let content;
-    const tab = { left: isHome, mid: route.name === "orders" || route.name === "vendor-dash" || route.name === "admin", right: route.name === "account" };
+    const tab = { left: isHome, mid: route.name === "orders" };
     switch (route.name) {
       case "category": content = viewCategory(route.params.id); break;
       case "showroom": content = viewShowroom(route.params.id); break;
@@ -870,11 +691,8 @@
       case "live": content = viewLive(route.params.id); break;
       case "deal": content = viewDeal(route.params.id); break;
       case "review": content = viewReview(route.params.id); break;
-      case "vendor-dash": content = viewVendor(); break;
-      case "admin": content = viewAdmin(); break;
-      case "account": content = viewAccount(); break;
-      case "legal": content = viewLegal(route.params.id); break;
       case "orders": content = viewOrders(); break;
+      case "legal": content = viewLegal(route.params.id); break;
       default: content = viewHome(); tab.left = true; break;
     }
 
@@ -882,16 +700,11 @@
 
     const tabHome = document.getElementById("tab-home");
     const tabWork = document.getElementById("tab-work");
-    const tabAcct = document.getElementById("tab-acct");
-
+    const tabAbout = document.getElementById("tab-about") || document.getElementById("tab-acct");
     tabHome.classList.toggle("is-active", tab.left);
     tabWork.classList.toggle("is-active", tab.mid);
-    tabAcct.classList.toggle("is-active", tab.right);
-
-    // role-aware middle tab label
-    const user = P.currentUser();
-    const midLabel = user && user.role === "vendor" ? "My shop" : user && user.role === "admin" ? "Ops" : "Orders";
-    tabWork.textContent = midLabel;
+    tabAbout.classList.toggle("is-active", route.name === "legal");
+    tabWork.textContent = "Orders";
 
     document.getElementById("backBtn").hidden = isHome;
     document.body.classList.toggle("has-subview", !isHome);
@@ -959,37 +772,6 @@
     const rv = document.querySelector("[data-review]");
     if (rv) rv.addEventListener("click", submitReview);
 
-    // role login
-    document.querySelectorAll("[data-login]").forEach((b) => {
-      b.addEventListener("click", () => {
-        P.login(b.dataset.login);
-        toast("Signed in as " + P.currentUser().name);
-        render();
-      });
-    });
-
-    // admin: mark payout paid / verify vendor
-    document.querySelectorAll("[data-markPaid]").forEach((b) => {
-      b.addEventListener("click", () => {
-        const id = b.dataset.markPaid;
-        const st = S.getState();
-        const sl = st.settlements.find((x) => x.id === id);
-        if (sl) { sl.status = "paid"; sl.paidAt = new Date().toISOString(); S.save(st); }
-        toast("Payout marked paid (Razorpay X transfer simulated)");
-        render();
-      });
-    });
-    document.querySelectorAll("[data-verify]").forEach((b) => {
-      b.addEventListener("click", () => {
-        const id = b.dataset.verify;
-        const st = S.getState();
-        const vd = st.showrooms.find((x) => x.id === id);
-        if (vd) { vd.verified = true; vd.insured = true; S.save(st); }
-        toast("Vendor verified (KYC approved)");
-        render();
-      });
-    });
-
     // location: Change toggle + GPS use + manual area pick
     document.querySelectorAll("[data-reloc]").forEach((a) => {
       a.addEventListener("click", (e) => {
@@ -1035,7 +817,6 @@
     const pin = document.getElementById("bk-pin").value.trim();
     const note = document.getElementById("bk-note").value.trim();
     const slotBtn = document.querySelector(".slot.is-active");
-    const user = P.currentUser();
 
     if (!addr) return toast("Enter your full address first");
     if (!pin || pin.length < 5) return toast("Enter a valid pincode");
@@ -1043,7 +824,7 @@
 
     const visit = S.createVisit(
       route.params.id,
-      { name: user ? user.name : "Guest", phone: user ? user.phone : "+91 98xxx xxxxx" },
+      { name: "Guest", phone: "+91 98xxx xxxxx" },
       { line: addr, pincode: pin, note: note || "" },
       new Date(slotBtn.dataset.slot)
     );
@@ -1117,13 +898,8 @@
   document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("backBtn").addEventListener("click", () => navigate("home"));
     document.getElementById("tab-home").addEventListener("click", () => navigate("home"));
-    document.getElementById("tab-work").addEventListener("click", () => {
-      const user = P.currentUser();
-      if (user && user.role === "vendor") navigate("vendor-dash");
-      else if (user && user.role === "admin") navigate("admin");
-      else navigate("orders");
-    });
-    document.getElementById("tab-acct").addEventListener("click", () => navigate("account"));
+    document.getElementById("tab-work").addEventListener("click", () => navigate("orders"));
+    document.getElementById("tab-about").addEventListener("click", () => navigate("legal", { id: "terms" }));
 
     // GPS: request on load; re-render when it resolves (re-sorts showrooms).
     if (typeof window.FAHGeo !== "undefined") {
@@ -1146,6 +922,6 @@
   window.__FAH_APP__ = {
     navigate, render,
     viewHome, viewCategory, viewShowroom, viewBook, viewLive, viewDeal, viewReview,
-    viewVendor, viewAdmin, viewAccount, viewOrders, viewLegal
+    viewOrders, viewLegal
   };
 })();
