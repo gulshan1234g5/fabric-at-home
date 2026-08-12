@@ -146,7 +146,8 @@ node test_store.js    # 35 logic tests: booking, 3% split, cancel, settlements, 
 node test_dom.js      # 35 render tests: customer journey, every view, GPS
 node test_geo.js      # 10 GPS tests: haversine, distance, ETA, states, overrides
 node test_search.js   # 12 search tests: fabrics, showrooms, zero-results, case-insensitivity
-node test_route.js    # 16 routing tests: OSRM mock, cache/dedupe, fallback, formatting
+node test_route.js    # 18 routing tests: OSRM Table mock, single-call matrix, rotation, fallback
+node test_e2e.js      # 18 live-E2E (Playwright): exact km/min, search, booking, IDB, error hygiene
 ```
 
 ## Design
